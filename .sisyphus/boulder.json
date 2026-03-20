@@ -1,14 +1,23 @@
 {
-  "active_plan": "/home/pcho/projects/AutoQuant/.sisyphus/plans/autoquant-enhancements.md",
-  "started_at": "2026-03-19T16:07:24.044Z",
+  "active_plan": "/home/pcho/projects/AutoQuant/.sisyphus/plans/separate-portfolio-tables.md",
+  "started_at": "2026-03-20T16:10:14.762Z",
   "session_ids": [
-    "ses_2fd95bc2cffeBBlegnY1sUEeGP",
-    "ses_2f923fb34ffeYLI8OVsGOgQomf",
-    "ses_2f923e529ffdw7OnJEHXAXM10O",
-    "ses_2f923e4f9ffecioI5AwS0iY7rJ",
-    "ses_2f923e51effeoD3zc35qTDEt91",
-    "ses_2f9211ca9ffexXnxy670vknS4m"
+    "ses_2f404d130ffe6v0L35NyPB9lUO",
+    "ses_2f3e6269dffeFeMII4S1Y7XkAC",
+    "ses_2f3e4d621ffestc70Oni73lQvw",
+    "ses_2f3e39a8effe4zhhxqsFdpb3C5",
+    "ses_2f3e10539ffeHR793RdZYDLMUd",
+    "ses_2f3dd8584ffei6hMWGMXZbmt2A",
+    "ses_2f3dd858affe8oMMXIryth47iP",
+    "ses_2f3dd8587ffed0o21k3rv6YE0h",
+    "ses_2f3dd86ebffe8EWLZ1BgX8q0G6",
+    "ses_2f3c1731cffeiZQe8l6opI4Qz6",
+    "ses_2f3bf5ef6ffeAvHR1jP2L4ySYr",
+    "ses_2f3bf5efbffeKw6nTzs1pGRsHV",
+    "ses_2f3bf5efeffeDUeUjXxCwsP2xZ",
+    "ses_2f3bf60b9ffeKz5T6snH42euUA",
+    "ses_2f36c485bffevWm3KilP81pdEN"
   ],
-  "plan_name": "autoquant-enhancements",
+  "plan_name": "separate-portfolio-tables",
   "agent": "atlas"
 }

@@ -1,0 +1,43 @@
+=== SQL Editor Execution Guide ===
+
+File: db/create_tables.sql
+
+SUPABASE DASHBOARD URL: https://app.supabase.com/
+
+STEP-BY-STEP EXECUTION:
+1. Go to: https://app.supabase.com/
+2. Sign in to your account
+3. Select your AutoQuant project
+4. Click 'SQL Editor' in the left sidebar
+5. Click '+ New Query' or 'New SQL Query'
+6. Copy all content from db/create_tables.sql
+7. Paste into the SQL Editor window
+8. Click the 'Run' button (or press Ctrl+Enter)
+
+EXPECTED RESULT:
+✓ Query executes successfully with no errors
+✓ Two tables created: 'portfolio' and 'paper_portfolio'
+✓ Four indexes created for efficient querying
+
+SCHEMA OVERVIEW:
+
+portfolio table:
+  - id: BIGSERIAL PRIMARY KEY (auto-increment)
+  - user_id: TEXT NOT NULL (user identifier)
+  - ticker: TEXT NOT NULL (stock symbol)
+  - quantity: FLOAT NOT NULL (number of shares)
+  - buy_price: FLOAT NOT NULL (purchase price per share)
+  - current_price: FLOAT DEFAULT 0.0 (current market price)
+  - created_at: TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  - Indexes: (user_id), (ticker)
+  - Constraint: UNIQUE (user_id, ticker)
+
+paper_portfolio table:
+  - Same schema as portfolio (for simulation positions)
+  - Indexes: (user_id), (ticker)
+  - Constraint: UNIQUE (user_id, ticker)
+
+IDEMPOTENCY NOTE:
+✓ All statements use 'IF NOT EXISTS' and can be safely re-run
+✓ Existing tables/indexes will not be recreated
+✓ Safe for deployment in continuous integration pipelines

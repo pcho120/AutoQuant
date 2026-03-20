@@ -1,0 +1,13 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.0.2, pluggy-1.6.0 -- /home/pcho/projects/AutoQuant/env/bin/python
+cachedir: .pytest_cache
+rootdir: /home/pcho/projects/AutoQuant
+configfile: pytest.ini
+plugins: anyio-4.12.1, mock-3.15.1
+collecting ... collected 3 items
+
+tests/test_table_isolation.py::test_no_cross_contamination_portfolio_and_paper_trading_isolation PASSED [ 33%]
+tests/test_table_isolation.py::test_isolation_portfolio_update_does_not_affect_paper_trading PASSED [ 66%]
+tests/test_table_isolation.py::test_isolation_paper_trading_sell_does_not_affect_portfolio PASSED [100%]
+
+============================== 3 passed in 1.17s ===============================

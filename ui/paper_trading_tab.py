@@ -41,7 +41,7 @@ def render_trading_tab(trading_service):
 
     try:
         with st.spinner("Loading holdings..."):
-            positions = db_client.fetch_positions(user_id)
+            positions = db_client.fetch_positions(user_id, table_name="paper_portfolio")
 
         if positions:
             tickers = [p.ticker for p in positions]
@@ -119,7 +119,7 @@ def render_trading_tab(trading_service):
                         row_idx = int(row_idx)
                         if row_idx < len(holdings_df):
                             ticker = str(holdings_df.iloc[row_idx]["Ticker"])
-                            if not db_client.delete_position(user_id, ticker):
+                            if not db_client.delete_position(user_id, ticker, table_name="paper_portfolio"):
                                 st.error(f"Failed to delete {ticker}")
                                 save_success = False
                 except Exception:
@@ -133,7 +133,7 @@ def render_trading_tab(trading_service):
                             ticker = str(holdings_df.iloc[row_idx]["Ticker"])
                             new_qty = float(changes.get("Quantity", holdings_df.iloc[row_idx]["Quantity"]))
                             new_price = float(changes.get("Buy Price", holdings_df.iloc[row_idx]["Buy Price"]))
-                            if not db_client.update_position(user_id, ticker, new_qty, new_price):
+                            if not db_client.update_position(user_id, ticker, new_qty, new_price, table_name="paper_portfolio"):
                                 st.error(f"Failed to update {ticker}")
                                 save_success = False
                 except Exception:
@@ -159,13 +159,13 @@ def render_trading_tab(trading_service):
                                     added_tickers.add(ticker)
 
                         if new_positions:
-                            existing_positions = db_client.fetch_positions(user_id)
+                            existing_positions = db_client.fetch_positions(user_id, table_name="paper_portfolio")
                             edited_tickers = set(edited_holdings_df["Ticker"])
                             existing_to_keep = [p for p in existing_positions if p.ticker in edited_tickers and p.ticker not in added_tickers]
                             all_positions = existing_to_keep + new_positions
-                            db_client.save_positions(user_id, all_positions)
+                            db_client.save_positions(user_id, all_positions, table_name="paper_portfolio")
 
-                            persisted_positions = db_client.fetch_positions(user_id)
+                            persisted_positions = db_client.fetch_positions(user_id, table_name="paper_portfolio")
                             persisted_tickers = set(p.ticker for p in persisted_positions)
                             for added_ticker in added_tickers:
                                 if added_ticker not in persisted_tickers:

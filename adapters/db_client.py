@@ -19,18 +19,19 @@ class DBClient:
 
         self.supabase = create_client(supabase_url, supabase_key)
 
-    def fetch_positions(self, user_id: str) -> List[Position]:
+    def fetch_positions(self, user_id: str, table_name: str = "portfolio") -> List[Position]:
         """
         Fetch all positions for a user from the database.
 
         Args:
             user_id: User identifier
+            table_name: Name of the table to fetch from (default: "portfolio")
 
         Returns:
             List of Position objects
         """
         try:
-            response = self.supabase.table("holdings").select("*").eq("user_id", user_id).execute()
+            response = self.supabase.table(table_name).select("*").eq("user_id", user_id).execute()
             positions = []
             for row in response.data:
                 position = Position(
@@ -44,21 +45,22 @@ class DBClient:
         except Exception:
             return []
 
-    def save_positions(self, user_id: str, positions: List[Position]) -> None:
+    def save_positions(self, user_id: str, positions: List[Position], table_name: str = "portfolio") -> None:
         """
         Save positions for a user (delete all existing, then insert new ones).
 
         Args:
             user_id: User identifier
             positions: List of Position objects to save
+            table_name: Name of the table to save to (default: "portfolio")
         """
         try:
             # Delete all existing positions for this user
-            self.supabase.table("holdings").delete().eq("user_id", user_id).execute()
+            self.supabase.table(table_name).delete().eq("user_id", user_id).execute()
 
             # Insert new positions
             for position in positions:
-                self.supabase.table("holdings").insert({
+                self.supabase.table(table_name).insert({
                     "user_id": user_id,
                     "ticker": position.ticker,
                     "quantity": position.quantity,
@@ -124,7 +126,7 @@ class DBClient:
         except Exception:
             return False
 
-    def update_position(self, user_id: str, ticker: str, quantity: float, buy_price: float) -> bool:
+    def update_position(self, user_id: str, ticker: str, quantity: float, buy_price: float, table_name: str = "portfolio") -> bool:
         """
         Update a single position in the database.
 
@@ -133,12 +135,13 @@ class DBClient:
             ticker: Stock ticker symbol
             quantity: Updated quantity
             buy_price: Updated buy price
+            table_name: Name of the table to update in (default: "portfolio")
 
         Returns:
             True if successful, False otherwise
         """
         try:
-            self.supabase.table("holdings").update({
+            self.supabase.table(table_name).update({
                 "quantity": quantity,
                 "buy_price": buy_price
             }).eq("user_id", user_id).eq("ticker", ticker).execute()
@@ -146,19 +149,20 @@ class DBClient:
         except Exception:
             return False
 
-    def delete_position(self, user_id: str, ticker: str) -> bool:
+    def delete_position(self, user_id: str, ticker: str, table_name: str = "portfolio") -> bool:
         """
         Delete a single position from the database.
 
         Args:
             user_id: User identifier
             ticker: Stock ticker symbol
+            table_name: Name of the table to delete from (default: "portfolio")
 
         Returns:
             True if successful, False otherwise
         """
         try:
-            self.supabase.table("holdings").delete().eq("user_id", user_id).eq("ticker", ticker).execute()
+            self.supabase.table(table_name).delete().eq("user_id", user_id).eq("ticker", ticker).execute()
             return True
         except Exception:
             return False

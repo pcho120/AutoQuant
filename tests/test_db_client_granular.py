@@ -31,7 +31,7 @@ def test_update_position_success(db_client, mock_supabase):
     result = db_client.update_position(user_id="user123", ticker="AAPL", quantity=20.0, buy_price=150.0)
 
     assert result is True
-    mock_supabase.table.assert_called_with("holdings")
+    mock_supabase.table.assert_called_with("portfolio")
     mock_table.update.assert_called_with({"quantity": 20.0, "buy_price": 150.0})
 
 
@@ -59,7 +59,7 @@ def test_update_position_calls_correct_filters(db_client, mock_supabase):
     db_client.update_position(user_id="user456", ticker="MSFT", quantity=5.0, buy_price=300.0)
 
     # Verify chained calls
-    mock_supabase.table.assert_called_with("holdings")
+    mock_supabase.table.assert_called_with("portfolio")
     mock_table.update.assert_called_once()
     assert mock_table.eq.call_count == 2
     mock_table.eq.assert_any_call("user_id", "user456")
@@ -79,7 +79,7 @@ def test_delete_position_success(db_client, mock_supabase):
     result = db_client.delete_position(user_id="user123", ticker="AAPL")
 
     assert result is True
-    mock_supabase.table.assert_called_with("holdings")
+    mock_supabase.table.assert_called_with("portfolio")
     mock_table.delete.assert_called_once()
 
 
@@ -107,7 +107,7 @@ def test_delete_position_calls_correct_filters(db_client, mock_supabase):
     db_client.delete_position(user_id="user789", ticker="GOOGL")
 
     # Verify chained calls
-    mock_supabase.table.assert_called_with("holdings")
+    mock_supabase.table.assert_called_with("portfolio")
     mock_table.delete.assert_called_once()
     assert mock_table.eq.call_count == 2
     mock_table.eq.assert_any_call("user_id", "user789")

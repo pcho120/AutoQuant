@@ -3,7 +3,10 @@ from domain.position import Order, Position
 
 
 class TradingService:
-    """Service for executing trading orders and calculating portfolio PnL."""
+    """Service for executing trading orders and calculating portfolio PnL.
+    
+    Uses the 'paper_portfolio' table for all position read/write operations during paper trading simulation.
+    """
 
     FEE_RATE = 0.001  # 0.1% transaction fee
 
@@ -60,7 +63,7 @@ class TradingService:
 
         elif order.action == "SELL":
             # Fetch current positions to validate quantity
-            positions = self.db.fetch_positions(user_id)
+            positions = self.db.fetch_positions(user_id, table_name="paper_portfolio")
             holding = next((p for p in positions if p.ticker == order.ticker), None)
             
             # Validate sufficient quantity

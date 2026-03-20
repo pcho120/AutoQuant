@@ -5,7 +5,10 @@ from domain.position import Portfolio, Position
 
 
 class PortfolioService:
-    """Service for managing portfolio operations including caching and risk labeling."""
+    """Service for managing portfolio operations including caching and risk labeling.
+    
+    Uses the 'portfolio' table for all position read/write operations.
+    """
 
     def __init__(self, db, market):
         """
@@ -32,7 +35,7 @@ class PortfolioService:
             Portfolio object with positions and current prices
         """
         # Fetch positions from database
-        positions = _self.db.fetch_positions(user_id)
+        positions = _self.db.fetch_positions(user_id, table_name="portfolio")
 
         # Get tickers for price lookup
         tickers = [p.ticker for p in positions]
@@ -70,7 +73,7 @@ class PortfolioService:
             )
             positions.append(position)
 
-        self.db.save_positions(user_id, positions)
+        self.db.save_positions(user_id, positions, table_name="portfolio")
         return True
 
     def label_risk(self, ticker: Ticker) -> RiskLevel:
