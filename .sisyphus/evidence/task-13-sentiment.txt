@@ -1,0 +1,2 @@
+Sentiment: 1.0
+✓ Sentiment bounded correctly

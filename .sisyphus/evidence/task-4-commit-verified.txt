@@ -1,0 +1,33 @@
+TASK 4: COMMIT VERIFICATION
+===========================
+
+SCENARIO: Clean commit with correct message
+
+COMMAND: git log -1 --oneline
+OUTPUT:
+  a7ea397 fix: add missing streamlit-searchbox dependency to requirements.txt
+RESULT: ✓ PASS - Commit message matches exactly
+
+COMMAND: git diff HEAD~1 --name-only
+OUTPUT:
+  requirements.txt
+RESULT: ✓ PASS - Only requirements.txt was changed
+
+COMMAND: git status
+OUTPUT:
+  On branch master
+  Your branch is ahead of 'origin/master' by 1 commit.
+    (use "git push" to publish your local commits)
+
+  Untracked files:
+    (use "git add <file>..." to include in what will be tracked)
+  	.sisyphus/
+  	__pycache__/chart.cpython-312.pyc
+  	__pycache__/paper_trading.cpython-312.pyc
+  	__pycache__/portfolio.cpython-312.pyc
+  	env/
+
+  nothing added to commit but untracked files present (use "git add <file>..." to track)
+RESULT: ✓ PASS - Working tree is clean (untracked files are normal)
+
+OVERALL: ✓ PASS - Commit created successfully with correct message and single file

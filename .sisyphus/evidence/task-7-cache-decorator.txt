@@ -1,0 +1,1 @@
+21:    @st.cache_data(ttl=300)

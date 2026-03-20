@@ -1,0 +1,65 @@
+=== Task 13: adapters/news_provider.py Complete Implementation Summary ===
+
+## Implementation Details
+
+### 1. NewsAPI Integration (fetch_news)
+- Endpoint: https://newsapi.org/v2/everything
+- Query parameters: ticker (q), date range (from/to), language=en, sortBy=relevancy
+- Date range: Uses datetime.timedelta to calculate last N days
+- Timeout: 10 seconds
+- Error handling: All exceptions caught, returns empty list []
+- Response parsing: Extracts "articles" array from JSON response
+
+### 2. Sentiment Analysis (get_sentiment)
+- Method: Keyword-based heuristic (fast, no ML dependencies)
+- Positive keywords (10): profit, growth, bullish, upgrade, beat, surge, gains, strong, outperform, rally
+- Negative keywords (10): loss, decline, bearish, downgrade, miss, plunge, weak, underperform, sell, crash
+- Text processing: Combines title + description, converts to lowercase
+- Formula: (pos_count - neg_count) / (pos_count + neg_count)
+- Bounding: max(-1.0, min(1.0, raw_sentiment)) ensures [-1.0, 1.0] range
+- Neutral case: Returns 0.0 when no keywords found
+
+### 3. API Key Management
+- Constructor parameter: api_key (str)
+- Supports st.secrets pattern: st.secrets.get('newsapi', {}).get('key', 'DEMO_KEY')
+- Supports direct injection: NewsProvider('my-api-key')
+- No hardcoded keys in source code
+
+## Verification Results
+
+✓ NewsAPI endpoint confirmed: newsapi.org present in source
+✓ get_sentiment() returns values in [-1.0, 1.0] range
+✓ fetch_news() returns list (graceful failure with invalid key)
+✓ No hardcoded API keys detected
+✓ API key management supports both st.secrets and injection patterns
+✓ All exception paths return safe defaults (empty list)
+
+## Test Cases Passed
+
+1. Positive sentiment: "profit growth bullish beat upgrade" → 1.0
+2. Negative sentiment: "loss decline bearish miss downgrade" → -1.0
+3. Neutral sentiment: "company update" → 0.0
+4. Empty article: {} → 0.0
+5. Invalid API key: fetch_news returns [] without exception
+6. Constructor injection: NewsProvider('test-key') works
+7. Secrets pattern: Compatible with st.secrets.get() chain
+
+## Evidence Files
+- task-13-sentiment.txt: Sentiment calculation verification
+- task-13-news-fetch.txt: News fetch with graceful failure
+- task-13-complete-summary.txt: This file
+
+## Unblocks
+- Task 14: Technical indicators (needs NewsProvider for prediction_service)
+- Task 15: AI prediction enhancement (combines news sentiment + indicators)
+- Task 16: Prediction tab UI enhancements
+
+## Files Modified
+- adapters/news_provider.py: Replaced stub with production implementation
+
+## Dependencies
+- requests: HTTP client for NewsAPI calls
+- datetime: Date range calculation
+- typing: Type hints (List, Dict)
+
+## Task Status: ✅ COMPLETE

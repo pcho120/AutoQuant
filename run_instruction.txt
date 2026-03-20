@@ -1,0 +1,22 @@
+To install all required packages
+    python -m pip install -r requirements.txt
+
+Install supabase
+    Inside env
+        python -m pip install supabase
+        or
+        pip install supabase
+
+To run on terminal\n
+    cd <path>
+    python -m install virtual environment
+    .\env\Scripts\activate
+
+Create a virtual environment
+    python -m venv <environment name>
+    .\env\Scripts\activate
+
+On VScode
+    Terminal -> python -m streamlit run app.py
+    or
+    streamlit run app.py
