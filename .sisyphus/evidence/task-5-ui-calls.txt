@@ -1,6 +1,0 @@
-44:            positions = db_client.fetch_positions(user_id, table_name="paper_portfolio")
-122:                            if not db_client.delete_position(user_id, ticker, table_name="paper_portfolio"):
-136:                            if not db_client.update_position(user_id, ticker, new_qty, new_price, table_name="paper_portfolio"):
-162:                            existing_positions = db_client.fetch_positions(user_id, table_name="paper_portfolio")
-166:                            db_client.save_positions(user_id, all_positions, table_name="paper_portfolio")
-168:                            persisted_positions = db_client.fetch_positions(user_id, table_name="paper_portfolio")

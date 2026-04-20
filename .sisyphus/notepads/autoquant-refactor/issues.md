@@ -1,1 +1,0 @@
-- Streamlit `st.columns` and `plotly` dependencies needed mocking during isolated command-line testing of `ui/portfolio_tab.py` since the CI/CD execution environment didn't have full UI libraries installed.

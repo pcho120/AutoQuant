@@ -1,6 +1,0 @@
-=== VERIFICATION COMMAND 1: ls legacy/ ===
-chart.py
-paper_trading.py
-portfolio.py
-
-=== VERIFICATION COMMAND 2: ls *.py | grep -E (portfolio|chart|paper_trading) OR TRUE ===

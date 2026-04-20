@@ -1,6 +1,0 @@
-Current Price: $150.00
-Predicted Price: $156.67
-Confidence: 22.2%
-Reasoning: News sentiment: 0.75; RSI: NEUTRAL, MACD: BEARISH...
-Has Metrics: PASS
-Non-Stub Output: PASS

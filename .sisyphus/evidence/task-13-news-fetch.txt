@@ -1,2 +1,0 @@
-News count: 0
-✓ fetch_news returns list (0 results with invalid key is expected)

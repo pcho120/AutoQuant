@@ -1,7 +1,0 @@
-- Modified `ui/prediction_tab.py` to use `PredictionService.predict_price()` results.
-- Rendered current price, predicted price (with delta and percentage), and confidence using `st.metric()`.
-- Added Markdown rendering for the reasoning text using `st.markdown(result.reasoning)`.
-- Implemented `prediction_history` in `st.session_state` to store and append previous predictions.
-- Rendered history using `st.dataframe` at the bottom of the tab.
-- Passed `python3 -m py_compile ui/prediction_tab.py` and smoke import successfully.
-- Update: Removed stub note and replaced with "AI-powered price prediction based on news sentiment and technical indicators."
