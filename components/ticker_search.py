@@ -1,5 +1,17 @@
 import streamlit as st
+import yfinance as yf
 from streamlit_searchbox import st_searchbox
+
+
+SUPPORTED_QUOTE_TYPES = {
+    "CRYPTOCURRENCY",
+    "CURRENCY",
+    "EQUITY",
+    "ETF",
+    "FUTURE",
+    "INDEX",
+    "MUTUALFUND",
+}
 
 
 @st.cache_data(ttl=3600)
@@ -25,9 +37,33 @@ def get_ticker_list() -> list[str]:
     ]
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def search_yahoo_tickers(query: str) -> list[tuple[str, str]]:
+    """Search Yahoo Finance for ticker symbols and display names."""
+    try:
+        quotes = yf.Search(query, max_results=15).quotes
+    except Exception:
+        return []
+
+    results = []
+    seen = set()
+    for quote in quotes:
+        symbol = quote.get("symbol", "").upper()
+        quote_type = quote.get("quoteType", "").upper()
+        if not symbol or symbol in seen or quote_type not in SUPPORTED_QUOTE_TYPES:
+            continue
+
+        name = quote.get("shortname") or quote.get("longname")
+        label = f"{symbol} - {name}" if name else symbol
+        results.append((label, symbol))
+        seen.add(symbol)
+
+    return results
+
+
 def search_tickers(query: str) -> list[tuple[str, str]]:
     """
-    Search tickers by prefix matching (case-insensitive).
+    Search Yahoo Finance, with common ticker symbols as an offline fallback.
     
     Args:
         query: Search query string (empty returns empty list)
@@ -38,11 +74,16 @@ def search_tickers(query: str) -> list[tuple[str, str]]:
     if not query:
         return []
     
-    query_upper = query.upper()
-    tickers = get_ticker_list()
-    matches = [t for t in tickers if t.startswith(query_upper)]
-    
-    return [(ticker, ticker) for ticker in matches[:15]]
+    query_upper = query.strip().upper()
+    live_results = search_yahoo_tickers(query_upper)
+    seen = {value for _, value in live_results}
+    fallback_results = [
+        (ticker, ticker)
+        for ticker in get_ticker_list()
+        if ticker.startswith(query_upper) and ticker not in seen
+    ]
+
+    return (live_results + fallback_results)[:15]
 
 
 def render_ticker_search(key: str, placeholder: str = "Search ticker...") -> str:

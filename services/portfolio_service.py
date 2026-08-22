@@ -21,7 +21,6 @@ class PortfolioService:
         self.db = db
         self.market = market
 
-    @st.cache_data(ttl=300)
     def get_portfolio(_self, user_id) -> Portfolio:
         """
         Fetch and return a user's portfolio with current prices.
@@ -34,6 +33,13 @@ class PortfolioService:
         Returns:
             Portfolio object with positions and current prices
         """
+        position_data = _self._get_portfolio_data(user_id)
+        positions = [Position(**data) for data in position_data]
+        return Portfolio(positions=positions, cash=10000.0)
+
+    @st.cache_data(ttl=300)
+    def _get_portfolio_data(_self, user_id) -> list[dict]:
+        """Fetch serializable position data for Streamlit's data cache."""
         # Fetch positions from database
         positions = _self.db.fetch_positions(user_id, table_name="portfolio")
 
@@ -47,8 +53,15 @@ class PortfolioService:
             for position in positions:
                 position.current_price = prices.get(position.ticker, position.current_price)
 
-        # Return portfolio with cash balance (hardcoded for now, can be extended to fetch from DB)
-        return Portfolio(positions=positions, cash=10000.0)
+        return [
+            {
+                "ticker": position.ticker,
+                "quantity": position.quantity,
+                "buy_price": position.buy_price,
+                "current_price": position.current_price,
+            }
+            for position in positions
+        ]
 
     def update_positions(self, user_id: str, edited_df) -> bool:
         """

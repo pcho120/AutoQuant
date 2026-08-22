@@ -49,7 +49,7 @@ def test_portfolio_service_get_portfolio_uses_portfolio_table(mock_db, mock_mark
     service = PortfolioService(db=mock_db, market=mock_market)
     
     # Act
-    service.get_portfolio.clear()  # Clear streamlit cache
+    service._get_portfolio_data.clear()  # Clear streamlit cache
     portfolio = service.get_portfolio(user_id="test_user")
     
     # Assert
@@ -103,7 +103,7 @@ def test_portfolio_service_never_calls_paper_portfolio_table(mock_db, mock_marke
     })
     
     # Act
-    service.get_portfolio.clear()
+    service._get_portfolio_data.clear()
     service.get_portfolio(user_id="test_user")
     service.update_positions(user_id="test_user", edited_df=df)
     
@@ -227,7 +227,7 @@ def test_no_cross_contamination_portfolio_and_paper_trading_isolation(mock_db, m
     trading_service = TradingService(db=mock_db, market=mock_market)
     
     # Act - Perform operations on both services
-    portfolio_service.get_portfolio.clear()
+    portfolio_service._get_portfolio_data.clear()
     portfolio = portfolio_service.get_portfolio(user_id="test_user")
     
     sell_order = Order(

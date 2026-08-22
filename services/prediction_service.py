@@ -1,4 +1,5 @@
 from domain.prediction import PredictionRequest, PredictionResult
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
 
 
@@ -229,3 +230,71 @@ class PredictionService:
             signals['macd'] = 'NEUTRAL'
         
         return signals
+
+    def scan_macd_golden_crosses(self, tickers: list[str]) -> list[dict]:
+        """Find tickers with a current or approaching daily MACD golden cross."""
+        def scan_ticker(ticker: str) -> dict | None:
+            try:
+                history = self.market.fetch_historical_data(ticker, period="6mo", interval="1d")
+                if history is None or len(history) < 35 or "Close" not in history:
+                    return None
+
+                close = history["Close"].dropna()
+                macd = close.ewm(span=12, adjust=False).mean() - close.ewm(span=26, adjust=False).mean()
+                signal = macd.ewm(span=9, adjust=False).mean()
+                histogram = macd - signal
+                status = self._classify_macd_cross(histogram)
+                if status is None:
+                    return None
+
+                request = PredictionRequest(
+                    ticker=ticker,
+                    horizon="5d",
+                    include_news=False,
+                    include_indicators=True,
+                )
+                prediction = self.predict_price(request)
+                info = self.market.fetch_ticker_info(ticker)
+                name = info.get("longName") or info.get("shortName") or ticker
+
+                return {
+                    "Ticker": ticker,
+                    "Name": name,
+                    "Status": status,
+                    "Current Price": prediction.current_price,
+                    "Predicted Price (5d)": prediction.predicted_price,
+                    "Expected Change (%)": prediction.change_percent,
+                }
+            except Exception:
+                return None
+
+        results = []
+        max_workers = min(getattr(self.market, "max_workers", 10), max(len(tickers), 1))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(scan_ticker, ticker) for ticker in dict.fromkeys(tickers)]
+            for future in as_completed(futures):
+                result = future.result()
+                if result is not None:
+                    results.append(result)
+
+        status_order = {"Golden Cross": 0, "Approaching": 1}
+        return sorted(results, key=lambda row: (status_order[row["Status"]], -row["Expected Change (%)"]))
+
+    @staticmethod
+    def _classify_macd_cross(histogram: pd.Series) -> str | None:
+        """Classify the latest MACD histogram as crossed, approaching, or neither."""
+        recent = histogram.dropna().iloc[-5:]
+        if len(recent) < 3:
+            return None
+
+        if recent.iloc[-2] <= 0 < recent.iloc[-1]:
+            return "Golden Cross"
+
+        latest_three = recent.iloc[-3:]
+        gap_is_closing = latest_three.iloc[0] < latest_three.iloc[1] < latest_three.iloc[2] < 0
+        recent_scale = max(float(recent.abs().max()), 1e-10)
+        is_near_signal = abs(float(latest_three.iloc[-1])) <= recent_scale * 0.35
+        if gap_is_closing and is_near_signal:
+            return "Approaching"
+
+        return None

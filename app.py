@@ -45,7 +45,7 @@ def get_trading_service():
 
 
 @st.cache_resource
-def get_prediction_service():
+def get_prediction_service(version: str):
     """Prediction service with injected dependencies."""
     market = get_market_data_adapter()
     news = get_news_provider()
@@ -57,7 +57,7 @@ st.markdown("# AutoQuant")
 
 portfolio_service = get_portfolio_service()
 trading_service = get_trading_service()
-prediction_service = get_prediction_service()
+prediction_service = get_prediction_service("macd-scanner-v1")
 
 tab1, tab2, tab3, tab4 = st.tabs(["Portfolio", "Paper Trading", "AI Prediction", "Settings"])
 
