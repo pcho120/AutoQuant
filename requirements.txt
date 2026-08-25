@@ -53,3 +53,5 @@ websockets==15.0.1
 yfinance==0.2.63
 supabase
 python-dotenv
+fastapi
+uvicorn[standard]

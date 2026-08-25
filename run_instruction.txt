@@ -15,6 +15,7 @@ To run on terminal\n
 Create a virtual environment
     python -m venv <environment name>
     .\env\Scripts\activate
+    .\env\Scripts\Activate.ps1  
 
 On VScode
     Terminal -> python -m streamlit run app.py
