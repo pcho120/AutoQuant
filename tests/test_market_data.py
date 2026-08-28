@@ -83,7 +83,7 @@ def test_fetch_historical_data(market_adapter):
         assert result["Close"].iloc[-1] == 154.0
         
         # Verify yfinance was called with correct parameters
-        mock_ticker_obj.history.assert_called_once_with(period="1mo", interval="1d")
+        mock_ticker_obj.history.assert_called_once_with(period="1mo", interval="1d", timeout=15.0)
 
 
 def test_fetch_ticker_info(market_adapter):
