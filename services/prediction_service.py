@@ -23,91 +23,8 @@ class PredictionService:
         self.news = news
 
     def predict_price(self, request: PredictionRequest) -> PredictionResult:
-        """
-        Predict stock price for a given ticker and horizon.
-
-        Args:
-            request: PredictionRequest with ticker, horizon, and optional flags
-
-        Returns:
-            PredictionResult with predicted price and confidence score
-        """
-        # Fetch current price via market adapter
-        prices = self.market.fetch_current_prices([request.ticker])
-        current_price = prices.get(request.ticker, 0.0)
-
-        # Initialize score components
-        score = 0.0
-        reasoning_parts = []
-
-        # 30% news sentiment contribution
-        if request.include_news:
-            news_articles = self.news.fetch_news(request.ticker)
-            if news_articles:
-                sentiment_sum = sum(self.news.get_sentiment(article) for article in news_articles)
-                news_sentiment = sentiment_sum / len(news_articles)
-                score += news_sentiment * 0.30
-                reasoning_parts.append(f"News sentiment: {news_sentiment:.2f}")
-            else:
-                reasoning_parts.append("No recent news")
-        else:
-            reasoning_parts.append("News not included")
-
-        # 70% indicator contribution (RSI 20%, MACD 30%, MA 20%)
-        if request.include_indicators:
-            indicators = self.calculate_indicators(request.ticker)
-            signals = self.generate_signals(indicators)
-
-            # RSI contribution (20%)
-            rsi = indicators.get('rsi', 50.0)
-            rsi_score = (rsi - 50.0) / 50.0  # Convert to [-1, 1]
-            score += rsi_score * 0.20
-
-            # MACD contribution (30%)
-            macd = indicators.get('macd', 0.0)
-            macd_signal = indicators.get('macd_signal', 0.0)
-            macd_diff = macd - macd_signal
-            max_price = indicators.get('current_price', 1.0)
-            if max_price > 0:
-                macd_score = max(-1.0, min(1.0, macd_diff / max_price))
-            else:
-                macd_score = 0.0
-            score += macd_score * 0.30
-
-            # MA contribution (20%)
-            sma_50 = indicators.get('sma_50', current_price)
-            sma_200 = indicators.get('sma_200', current_price)
-            ma_current = current_price
-            if sma_50 > 0 and sma_200 > 0:
-                ma_score = ((ma_current - sma_200) / sma_200) * 0.5
-                ma_score = max(-1.0, min(1.0, ma_score))
-            else:
-                ma_score = 0.0
-            score += ma_score * 0.20
-
-            reasoning_parts.append(f"RSI: {signals.get('rsi', 'N/A')}, MACD: {signals.get('macd', 'N/A')}")
-        else:
-            reasoning_parts.append("Indicators not included")
-
-        # Clamp score to [-1, 1]
-        score = max(-1.0, min(1.0, score))
-
-        # Calculate predicted price with max_change of 20%
-        max_change = 0.20
-        predicted_price = current_price * (1 + score * max_change)
-
-        # Calculate confidence: min(abs(score) * 100, 85) bounded [0, 100]
-        confidence = min(abs(score) * 100, 85)
-        confidence = max(0.0, min(100.0, confidence))
-
-        # Create result
-        return PredictionResult(
-            ticker=request.ticker,
-            current_price=current_price,
-            predicted_price=predicted_price,
-            confidence=confidence,
-            reasoning="; ".join(reasoning_parts),
-            chart_data=None,
+        raise RuntimeError(
+            "Rule-based price prediction has been retired; read a validated cached prediction from Supabase"
         )
 
     def calculate_indicators(self, ticker: str) -> dict:
@@ -247,13 +164,7 @@ class PredictionService:
                 if status is None:
                     return None
 
-                request = PredictionRequest(
-                    ticker=ticker,
-                    horizon="5d",
-                    include_news=False,
-                    include_indicators=True,
-                )
-                prediction = self.predict_price(request)
+                current_price = float(close.iloc[-1])
                 info = self.market.fetch_ticker_info(ticker)
                 name = info.get("longName") or info.get("shortName") or ticker
 
@@ -261,9 +172,9 @@ class PredictionService:
                     "Ticker": ticker,
                     "Name": name,
                     "Status": status,
-                    "Current Price": prediction.current_price,
-                    "Predicted Price (5d)": prediction.predicted_price,
-                    "Expected Change (%)": prediction.change_percent,
+                    "Current Price": current_price,
+                    "Predicted Price (5d)": None,
+                    "Expected Change (%)": None,
                 }
             except Exception:
                 return None
@@ -278,7 +189,7 @@ class PredictionService:
                     results.append(result)
 
         status_order = {"Golden Cross": 0, "Approaching": 1}
-        return sorted(results, key=lambda row: (status_order[row["Status"]], -row["Expected Change (%)"]))
+        return sorted(results, key=lambda row: (status_order[row["Status"]], row["Ticker"]))
 
     @staticmethod
     def _classify_macd_cross(histogram: pd.Series) -> str | None:

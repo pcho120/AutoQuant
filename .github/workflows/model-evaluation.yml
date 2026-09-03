@@ -1,0 +1,32 @@
+name: Weekly model evaluation
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 14 * * 6"
+
+concurrency:
+  group: autoquant-model-evaluation
+  cancel-in-progress: false
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      COLLECTION_TICKERS: ${{ vars.COLLECTION_TICKERS }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - name: Build latest features
+        run: python -m jobs.runner build_prediction_features
+      - name: Run purged walk-forward evaluation and train model
+        run: python -m jobs.runner run_model_evaluation
+      - name: Refresh predictions with validated model
+        run: python -m jobs.runner run_predictions

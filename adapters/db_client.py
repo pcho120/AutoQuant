@@ -46,7 +46,7 @@ class DBClient:
         except Exception:
             return []
 
-    def save_positions(self, user_id: str, positions: List[Position], table_name: str = "portfolio") -> None:
+    def save_positions(self, user_id: str, positions: List[Position], table_name: str = "portfolio") -> bool:
         """
         Save positions for a user (delete all existing, then insert new ones).
 
@@ -67,8 +67,9 @@ class DBClient:
                     "quantity": position.quantity,
                     "buy_price": position.buy_price
                 }).execute()
+            return True
         except Exception:
-            pass
+            return False
 
     def fetch_orders(self, user_id: str) -> List[Order]:
         """

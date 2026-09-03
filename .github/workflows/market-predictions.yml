@@ -1,0 +1,59 @@
+name: Daily market predictions
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Both UTC hours are intentional. The timezone gate handles US DST safely.
+    - cron: "20 20,21 * * 1-5"
+
+concurrency:
+  group: autoquant-market-predictions
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      COLLECTION_TICKERS: ${{ vars.COLLECTION_TICKERS }}
+      MARKET_COLLECTION_PERIOD: 10y
+      MARKET_COLLECTION_INTERVAL: 1d
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - name: Check New York close window
+        id: market_time
+        shell: python
+        run: |
+          import os
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+          manual = os.getenv("GITHUB_EVENT_NAME") == "workflow_dispatch"
+          now = datetime.now(ZoneInfo("America/New_York"))
+          should_run = manual or (now.weekday() < 5 and now.hour == 16)
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"should_run={str(should_run).lower()}\n")
+      - name: Collect daily market data
+        id: market
+        if: steps.market_time.outputs.should_run == 'true'
+        continue-on-error: true
+        run: python -m jobs.runner collect_market_data
+      - name: Build prediction features
+        id: features
+        if: steps.market_time.outputs.should_run == 'true'
+        continue-on-error: true
+        run: python -m jobs.runner build_prediction_features
+      - name: Update cached predictions
+        id: predictions
+        if: steps.market_time.outputs.should_run == 'true'
+        continue-on-error: true
+        run: python -m jobs.runner run_predictions
+      - name: Report update failure
+        if: always() && steps.market_time.outputs.should_run == 'true' && (steps.market.outcome == 'failure' || steps.features.outcome == 'failure' || steps.predictions.outcome == 'failure')
+        run: exit 1

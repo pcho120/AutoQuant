@@ -7,7 +7,7 @@ import pandas as pd
 class MarketDataAdapter:
     """Adapter for fetching market data using yfinance with parallel execution."""
 
-    def __init__(self, max_workers: int = 10):
+    def __init__(self, max_workers: int = 10, request_timeout: float = 15.0):
         """
         Initialize the adapter with a thread pool.
 
@@ -15,6 +15,7 @@ class MarketDataAdapter:
             max_workers: Maximum number of threads for parallel execution
         """
         self.max_workers = max_workers
+        self.request_timeout = request_timeout
 
     def fetch_current_prices(self, tickers: List[str]) -> Dict[str, float]:
         """
@@ -33,7 +34,7 @@ class MarketDataAdapter:
             """Fetch price for a single ticker, return (ticker, price or None)."""
             try:
                 ticker_obj = yf.Ticker(ticker)
-                hist = ticker_obj.history(period="1d")
+                hist = ticker_obj.history(period="1d", timeout=self.request_timeout)
                 if not hist.empty:
                     return (ticker, float(hist["Close"].iloc[-1]))
                 return (ticker, None)
@@ -65,7 +66,7 @@ class MarketDataAdapter:
             DataFrame with OHLCV data
         """
         ticker_obj = yf.Ticker(ticker)
-        return ticker_obj.history(period=period, interval=interval)
+        return ticker_obj.history(period=period, interval=interval, timeout=self.request_timeout)
 
     def fetch_ticker_info(self, ticker: str) -> dict:
         """
@@ -79,3 +80,22 @@ class MarketDataAdapter:
         """
         ticker_obj = yf.Ticker(ticker)
         return ticker_obj.info
+
+    def search_tickers(self, query: str) -> list[dict[str, str]]:
+        """Search Yahoo Finance for supported market symbols."""
+        supported_types = {
+            "CRYPTOCURRENCY", "CURRENCY", "EQUITY", "ETF", "FUTURE", "INDEX", "MUTUALFUND",
+        }
+        quotes = yf.Search(query.strip(), max_results=15).quotes
+        results = []
+        seen = set()
+        for quote in quotes:
+            symbol = quote.get("symbol", "").upper()
+            if not symbol or symbol in seen or quote.get("quoteType", "").upper() not in supported_types:
+                continue
+            results.append({
+                "ticker": symbol,
+                "name": quote.get("shortname") or quote.get("longname") or symbol,
+            })
+            seen.add(symbol)
+        return results

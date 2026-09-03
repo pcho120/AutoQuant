@@ -7,6 +7,10 @@ Install supabase
         or
         pip install supabase
 
+Local environment variables
+    secrets.env must use KEY="value" lines with no heading text.
+    Required: SUPABASE_URL, SUPABASE_KEY, NEWS_API_KEY
+
 To run on terminal\n
     cd <path>
     python -m install virtual environment
@@ -18,6 +22,36 @@ Create a virtual environment
     .\env\Scripts\Activate.ps1  
 
 On VScode
-    Terminal -> python -m streamlit run app.py
-    or
-    streamlit run app.py
+    Terminal 1: FastAPI Backend
+        cd D:\Dev\AutoQuant
+        .\env\Scripts\Activate.ps1
+        python -m uvicorn api:app --host 127.0.0.1 --port 8000
+    
+    Terminal 2: React Frontend
+        cd D:\Dev\AutoQuant\frontend
+        npm install
+        npm run dev -- --host 127.0.0.1 --port 5173
+
+    The backend and frontend do not start data collection automatically.
+
+Run data collection jobs independently
+    cd D:\Dev\AutoQuant
+    # Run in this order to refresh stored data and cached predictions.
+    .\env\Scripts\python.exe -m jobs.runner collect_market_data
+    .\env\Scripts\python.exe -m jobs.runner collect_news
+    .\env\Scripts\python.exe -m jobs.runner analyze_unprocessed_news
+    .\env\Scripts\python.exe -m jobs.runner build_prediction_features
+    .\env\Scripts\python.exe -m jobs.runner run_model_evaluation
+    .\env\Scripts\python.exe -m jobs.runner run_predictions
+
+Production scheduling
+    Configure GitHub repository secrets SUPABASE_URL, SUPABASE_KEY, NEWS_API_KEY.
+    Optionally configure repository variable COLLECTION_TICKERS.
+    Apply db/create_tables.sql before running any new prediction job.
+    Enable .github/workflows/data-collection.yml for hourly news.
+    Enable .github/workflows/market-predictions.yml for DST-safe daily close updates.
+    Enable .github/workflows/model-evaluation.yml for weekly retraining/backtesting.
+
+Production frontend/backend
+    Set FastAPI CORS_ORIGINS to the deployed React origin.
+    Set React build variable VITE_API_BASE_URL to the deployed FastAPI URL.

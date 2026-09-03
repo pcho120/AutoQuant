@@ -11,7 +11,7 @@ class NewsProvider:
     Handles API failures gracefully by returning empty results.
     """
 
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, request_timeout: float = 10.0, raise_on_error: bool = False):
         """
         Initialize the news provider with an API key.
 
@@ -20,6 +20,8 @@ class NewsProvider:
         """
         self.api_key = api_key
         self.base_url = "https://newsapi.org/v2"
+        self.request_timeout = request_timeout
+        self.raise_on_error = raise_on_error
 
     def fetch_news(self, ticker: str, days: int = 7) -> List[Dict]:
         """
@@ -52,7 +54,7 @@ class NewsProvider:
             response = requests.get(
                 f"{self.base_url}/everything",
                 params=params,
-                timeout=10
+                timeout=self.request_timeout
             )
             
             if response.status_code == 200:
@@ -60,8 +62,13 @@ class NewsProvider:
                 if data.get("status") == "ok" and isinstance(data.get("articles"), list):
                     return data.get("articles", [])
             
+            if self.raise_on_error:
+                response.raise_for_status()
+                raise RuntimeError(f"NewsAPI returned an invalid response: {response.status_code}")
             return []
         except Exception:
+            if self.raise_on_error:
+                raise
             return []
 
     def get_sentiment(self, article: dict) -> float:

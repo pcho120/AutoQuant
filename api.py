@@ -1,25 +1,47 @@
 from functools import lru_cache
+from datetime import datetime, timezone
 import math
-from typing import Annotated
+import os
+from typing import Annotated, Literal
 
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
-from adapters import DBClient, MarketDataAdapter
-from domain.position import Position
+from adapters import DBClient, MarketDataAdapter, NewsProvider, WebullPortfolioAdapter
+from adapters.collection_repository import CollectionRepository
+from domain.position import Order, Position
+from domain.prediction import PredictionRequest
+from services import PredictionService, TradingService
 
 
 ALLOWED_PERIODS = {"1d", "5d", "1mo", "3mo", "6mo", "1y"}
 ALLOWED_INTERVALS = {"1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h", "1d"}
+PREDICTION_TICKERS = [
+    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "BRK.B", "JNJ", "V",
+    "WMT", "JPM", "MA", "PG", "DIS", "ADBE", "CRM", "NFLX", "PYPL", "INTC",
+    "AMD", "MU", "QCOM", "IBM", "CSCO", "ORCL", "SAP", "TXN", "STM", "GOOG",
+    "BABA", "JD", "BIDU", "NTES", "SPY", "QQQ", "IVV", "VOO", "VTI", "BND",
+    "AGG", "GLD", "TLT", "LQD", "F", "GM", "TM", "HMC", "TSM", "UNH",
+    "CVS", "ABT", "PFE", "MRK", "GILD", "BIIB", "REGN", "VEEV", "ILMN", "CRSP",
+    "EDIT", "BEAM", "XOM", "CVX", "COP", "EOG", "PSX", "MPC", "VLO", "HES",
+    "OKE", "EQT", "BAC", "WFC", "GS", "BLK", "SCHW", "CME", "ICE", "CBOE",
+    "MSCI", "SPGI", "SO", "NEE", "DUK", "EXC", "AEP", "XEL", "D", "PPL",
+    "ETR", "ED", "PLD", "AMT", "CCI", "EQIX", "DLR", "VICI", "SBAC", "STAG", "PEG",
+]
+CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
+    if origin.strip()
+]
 
 app = FastAPI(title="AutoQuant Market API", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "PUT"],
+    allow_methods=["GET", "PUT", "POST"],
     allow_headers=["*"],
 )
 
@@ -32,6 +54,25 @@ def get_db_client() -> DBClient:
 @lru_cache
 def get_market_data() -> MarketDataAdapter:
     return MarketDataAdapter()
+
+
+@lru_cache
+def get_trading_service() -> TradingService:
+    return TradingService(get_db_client(), get_market_data())
+
+
+@lru_cache
+def get_prediction_service() -> PredictionService:
+    return PredictionService(get_market_data(), NewsProvider(os.getenv("NEWS_API_KEY", "")))
+
+
+def get_webull_portfolio() -> WebullPortfolioAdapter:
+    return WebullPortfolioAdapter()
+
+
+@lru_cache
+def get_collection_repository() -> CollectionRepository:
+    return CollectionRepository()
 
 
 class PositionInput(BaseModel):
@@ -50,6 +91,55 @@ class PositionInput(BaseModel):
 
 class PortfolioInput(BaseModel):
     positions: list[PositionInput]
+
+
+class PaperPositionInput(BaseModel):
+    ticker: str
+    quantity: float = Field(gt=0)
+    buyPrice: float = Field(ge=0)
+
+    @field_validator("ticker")
+    @classmethod
+    def normalize_ticker(cls, value: str) -> str:
+        ticker = value.strip().upper()
+        if not ticker:
+            raise ValueError("Ticker is required")
+        return ticker
+
+
+class PaperPortfolioInput(BaseModel):
+    positions: list[PaperPositionInput]
+
+
+class OrderInput(BaseModel):
+    ticker: str
+    action: Literal["BUY", "SELL"]
+    quantity: float = Field(gt=0)
+    price: float = Field(gt=0)
+    cashBalance: float = Field(ge=0)
+
+    @field_validator("ticker")
+    @classmethod
+    def normalize_ticker(cls, value: str) -> str:
+        ticker = value.strip().upper()
+        if not ticker:
+            raise ValueError("Ticker is required")
+        return ticker
+
+
+class PredictionInput(BaseModel):
+    ticker: str
+    horizon: Literal["1d", "5d", "1mo"]
+    includeNews: bool = True
+    includeIndicators: bool = True
+
+    @field_validator("ticker")
+    @classmethod
+    def normalize_ticker(cls, value: str) -> str:
+        ticker = value.strip().upper()
+        if not ticker:
+            raise ValueError("Ticker is required")
+        return ticker
 
 
 def _number(value) -> float | None:
@@ -163,8 +253,185 @@ def save_portfolio(user_id: str, payload: PortfolioInput) -> dict:
         )
         for item in payload.positions
     ]
-    get_db_client().save_positions(user_id, positions, table_name="portfolio")
+    if get_db_client().save_positions(user_id, positions, table_name="portfolio") is False:
+        raise HTTPException(status_code=502, detail="Unable to save portfolio to Supabase")
     return {"userId": user_id, "saved": len(positions)}
+
+
+@app.post("/api/portfolio/{user_id}/sync-webull")
+def sync_webull_portfolio(user_id: str) -> dict:
+    try:
+        webull_portfolio = get_webull_portfolio().fetch_portfolio()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Unable to fetch portfolio from Webull") from exc
+
+    if get_db_client().save_positions(
+        user_id,
+        webull_portfolio.positions,
+        table_name="portfolio",
+    ) is False:
+        raise HTTPException(status_code=502, detail="Unable to save Webull portfolio to Supabase")
+
+    return {
+        "userId": user_id,
+        "accounts": webull_portfolio.account_count,
+        "synced": len(webull_portfolio.positions),
+    }
+
+
+@app.get("/api/paper-trading/{user_id}")
+def paper_portfolio(user_id: str) -> dict:
+    positions = get_db_client().fetch_positions(user_id, table_name="paper_portfolio")
+    prices = get_market_data().fetch_current_prices([position.ticker for position in positions])
+    return {
+        "userId": user_id,
+        "positions": [
+            {
+                "ticker": position.ticker,
+                "quantity": position.quantity,
+                "buyPrice": position.buy_price,
+                "currentPrice": prices.get(position.ticker, position.current_price),
+            }
+            for position in positions
+        ],
+    }
+
+
+@app.put("/api/paper-trading/{user_id}")
+def save_paper_portfolio(user_id: str, payload: PaperPortfolioInput) -> dict:
+    positions = [
+        Position(item.ticker, item.quantity, item.buyPrice, 0.0)
+        for item in payload.positions
+    ]
+    if get_db_client().save_positions(user_id, positions, table_name="paper_portfolio") is False:
+        raise HTTPException(status_code=502, detail="Unable to save paper portfolio to Supabase")
+    return {"userId": user_id, "saved": len(positions)}
+
+
+@app.post("/api/paper-trading/{user_id}/orders")
+def execute_paper_order(user_id: str, payload: OrderInput) -> dict:
+    order = Order(
+        ticker=payload.ticker,
+        action=payload.action,
+        quantity=payload.quantity,
+        price=payload.price,
+        timestamp=datetime.now(),
+    )
+    result = get_trading_service().execute_order(user_id, order, payload.cashBalance)
+    if result.get("status") != "SUCCESS":
+        raise HTTPException(status_code=400, detail=result.get("reason", "Order failed"))
+    return result
+
+
+def _prediction_payload(row: dict, news: list[dict] | None = None) -> dict:
+    timestamp = pd.Timestamp(row["prediction_timestamp"])
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.tz_localize("UTC")
+    age = pd.Timestamp.now(tz="UTC") - timestamp.tz_convert("UTC")
+    return {
+        "ticker": row["ticker"],
+        "horizon": row["horizon"],
+        "predictionTimestamp": timestamp.isoformat(),
+        "currentPrice": row["current_price"],
+        "expectedReturn": row.get("expected_return"),
+        "predictedPrice": row.get("predicted_price"),
+        "probabilityUp": row.get("probability_up"),
+        "downsideRisk": row.get("downside_risk"),
+        "riskReward": row.get("risk_reward"),
+        "signal": row["signal"],
+        "modelReliability": row.get("reliability"),
+        "reliabilityStatus": row["reliability_status"],
+        "modelVersion": row["model_version"],
+        "featureVersion": row["feature_version"],
+        "stale": age > pd.Timedelta(days=4),
+        "explanation": row.get("explanation") or {},
+        "recentNews": news or [],
+    }
+
+
+def _prediction_read_error(exc: Exception) -> HTTPException:
+    if getattr(exc, "code", None) == "PGRST205":
+        return HTTPException(
+            status_code=503,
+            detail="Prediction tables are not initialized in Supabase. Apply db/create_tables.sql.",
+        )
+    return HTTPException(status_code=502, detail="Unable to read cached prediction")
+
+
+@app.post("/api/predictions")
+def predict_price(payload: PredictionInput) -> dict:
+    try:
+        row = get_collection_repository().fetch_latest_prediction(payload.ticker, payload.horizon)
+    except Exception as exc:
+        raise _prediction_read_error(exc) from exc
+    if not row:
+        raise HTTPException(status_code=404, detail="Insufficient historical validation data")
+    news = get_collection_repository().fetch_recent_news(payload.ticker, row["prediction_timestamp"])
+    return _prediction_payload(row, news)
+
+
+@app.get("/api/predictions/screener")
+def prediction_screener(
+    sort: Literal["expected_return", "probability_up"] = "expected_return",
+    horizon: Literal["5d"] = "5d",
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> dict:
+    try:
+        rows = get_collection_repository().fetch_latest_predictions(horizon)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Unable to read prediction screener") from exc
+    eligible = [row for row in rows if row.get(sort) is not None]
+    eligible.sort(key=lambda row: row[sort], reverse=True)
+    return {"sort": sort, "horizon": horizon, "results": [_prediction_payload(row) for row in eligible[:limit]]}
+
+
+@app.get("/api/predictions/{ticker}")
+def prediction_detail(ticker: str, horizon: Literal["5d"] = "5d") -> dict:
+    normalized = ticker.strip().upper()
+    if not normalized or len(normalized) > 10 or not normalized.replace(".", "").replace("-", "").isalnum():
+        raise HTTPException(status_code=400, detail="Invalid ticker")
+    try:
+        row = get_collection_repository().fetch_latest_prediction(normalized, horizon)
+        if not row:
+            raise HTTPException(status_code=404, detail="Insufficient historical validation data")
+        news = get_collection_repository().fetch_recent_news(normalized, row["prediction_timestamp"])
+        return _prediction_payload(row, news)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _prediction_read_error(exc) from exc
+
+
+@app.post("/api/predictions/scan-macd")
+def scan_macd_golden_crosses() -> dict:
+    try:
+        results = get_prediction_service().scan_macd_golden_crosses(PREDICTION_TICKERS)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Unable to scan MACD signals") from exc
+    return {
+        "results": [
+            {
+                "ticker": row["Ticker"],
+                "name": row["Name"],
+                "status": row["Status"],
+                "currentPrice": row["Current Price"],
+                "predictedPrice": row["Predicted Price (5d)"],
+                "expectedChangePercent": row["Expected Change (%)"],
+            }
+            for row in results
+        ],
+    }
+
+
+@app.get("/api/tickers")
+def search_tickers(q: Annotated[str, Query(min_length=1, max_length=50)]) -> dict:
+    try:
+        results = get_market_data().search_tickers(q)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Unable to search tickers") from exc
+    return {"results": results}
 
 
 @app.get("/api/market/{ticker}")

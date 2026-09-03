@@ -36,6 +36,7 @@ referencing==0.36.2
 pytest==9.1.1
 requests==2.32.4
 rpds-py==0.25.1
+scikit-learn==1.7.1
 six==1.17.0
 smmap==5.0.2
 soupsieve==2.7
@@ -51,7 +52,9 @@ urllib3==2.4.0
 watchdog==6.0.0
 websockets==15.0.1
 yfinance==0.2.63
+joblib==1.5.2
 supabase
 python-dotenv
 fastapi
 uvicorn[standard]
+webull-openapi-python-sdk==2.0.18

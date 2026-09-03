@@ -204,6 +204,22 @@ def test_prediction_missing_returns_honest_status(monkeypatch):
     assert response.json()["detail"] == "Insufficient historical validation data"
 
 
+def test_prediction_missing_schema_returns_setup_instruction(monkeypatch):
+    class MissingTableError(Exception):
+        code = "PGRST205"
+
+    repository = Mock()
+    repository.fetch_latest_prediction.side_effect = MissingTableError()
+    monkeypatch.setattr(api, "get_collection_repository", lambda: repository)
+
+    response = TestClient(api.app).get("/api/predictions/NVDA")
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == (
+        "Prediction tables are not initialized in Supabase. Apply db/create_tables.sql."
+    )
+
+
 def test_prediction_screener_sorts_latest_rows(monkeypatch):
     repository = Mock()
     repository.fetch_latest_predictions.return_value = [
