@@ -19,8 +19,8 @@ jobs:
       NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
       COLLECTION_TICKERS: ${{ vars.COLLECTION_TICKERS }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: pip
