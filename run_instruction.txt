@@ -50,7 +50,7 @@ Production scheduling
     Configure GitHub repository secrets SUPABASE_URL, SUPABASE_KEY, NEWS_API_KEY.
     Optionally configure repository variable COLLECTION_TICKERS.
     Apply db/create_tables.sql before running any new prediction job.
-    Enable .github/workflows/data-collection.yml for hourly news.
+    Enable .github/workflows/data-collection.yml for news every 8 hours (48 requests/day for 16 tickers).
     Enable .github/workflows/market-predictions.yml for DST-safe daily close updates.
     Enable .github/workflows/model-evaluation.yml for weekly retraining/backtesting.
 

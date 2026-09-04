@@ -173,7 +173,7 @@ Each command is safe to run repeatedly. Market candles use database upsert. Dupl
 
 Production scheduling is split by workload:
 
-- `.github/workflows/data-collection.yml`: raw news collection and stored-news analysis at minute 17 every hour, every day.
+- `.github/workflows/data-collection.yml`: raw news collection and stored-news analysis every 8 hours at 00:17, 08:17, and 16:17 UTC. With the default 16 tickers, this uses 48 NewsAPI requests per day and stays within the Developer plan quota.
 - `.github/workflows/market-predictions.yml`: triggered at 20:20 and 21:20 UTC on weekdays. An `America/New_York` gate permits only the run occurring at 16:20 local time, so DST is handled without seasonal cron edits. Order is market collection, feature build, cached prediction update.
 - `.github/workflows/model-evaluation.yml`: Saturdays at 14:30 UTC. Rebuilds features, performs purged walk-forward evaluation, stores the new artifact/evaluation, and refreshes predictions.
 

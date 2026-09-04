@@ -3,7 +3,7 @@ name: News collection and analysis
 on:
   workflow_dispatch:
   schedule:
-    - cron: "17 * * * *"
+    - cron: "17 */8 * * *"
 
 concurrency:
   group: autoquant-data-collection
