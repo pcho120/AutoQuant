@@ -105,6 +105,8 @@ ALTER TABLE news_articles ADD COLUMN IF NOT EXISTS provider_article_id TEXT;
 ALTER TABLE news_articles ADD COLUMN IF NOT EXISTS analyzed_at TIMESTAMPTZ;
 ALTER TABLE news_articles ADD COLUMN IF NOT EXISTS analysis_version TEXT;
 
+ALTER TABLE news_articles DROP CONSTRAINT IF EXISTS news_articles_url_key;
+ALTER TABLE news_articles DROP CONSTRAINT IF EXISTS news_articles_provider_article_id_key;
 DROP INDEX IF EXISTS idx_news_articles_url;
 DROP INDEX IF EXISTS idx_news_articles_provider_id;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_news_articles_ticker_url

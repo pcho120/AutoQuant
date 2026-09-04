@@ -169,6 +169,21 @@ def test_same_news_article_is_upserted_without_duplicate():
     assert collected_at.utcoffset() == timedelta(0)
 
 
+def test_same_news_article_can_be_associated_with_multiple_tickers():
+    client = FakeSupabase()
+    article = {
+        "source": {"name": "Example Wire"},
+        "title": "Technology stocks rally",
+        "url": "https://example.com/technology-rally",
+        "publishedAt": "2026-08-27T12:00:00Z",
+    }
+    collector = NewsCollector(StaticNews([article]), CollectionRepository(client), config())
+
+    collector.collect(("AAPL", "NVDA"))
+
+    assert [row["ticker"] for row in client.rows["news_articles"]] == ["AAPL", "NVDA"]
+
+
 def test_analyzed_news_is_not_analyzed_again():
     client = FakeSupabase()
     client.rows["news_articles"].append({
