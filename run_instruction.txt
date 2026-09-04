@@ -33,6 +33,8 @@ On VScode
         npm run dev -- --host 127.0.0.1 --port 5173
 
     The backend and frontend do not start data collection automatically.
+    The Leverage Engine uses the same two servers and needs no separate process.
+    Open the Leverage Engine tab, review the current signal, then run a backtest.
 
 Run data collection jobs independently
     cd D:\Dev\AutoQuant

@@ -14,6 +14,7 @@ from adapters.collection_repository import CollectionRepository
 from domain.position import Order, Position
 from domain.prediction import PredictionRequest
 from services import PredictionService, TradingService
+from services.leverage_engine import BacktestConfig, LeverageEngineService
 
 
 ALLOWED_PERIODS = {"1d", "5d", "1mo", "3mo", "6mo", "1y"}
@@ -64,6 +65,11 @@ def get_trading_service() -> TradingService:
 @lru_cache
 def get_prediction_service() -> PredictionService:
     return PredictionService(get_market_data(), NewsProvider(os.getenv("NEWS_API_KEY", "")))
+
+
+@lru_cache
+def get_leverage_engine() -> LeverageEngineService:
+    return LeverageEngineService(get_market_data())
 
 
 def get_webull_portfolio() -> WebullPortfolioAdapter:
@@ -140,6 +146,16 @@ class PredictionInput(BaseModel):
         if not ticker:
             raise ValueError("Ticker is required")
         return ticker
+
+
+class LeverageBacktestInput(BaseModel):
+    benchmark: Literal["QQQ", "^NDX"] = "QQQ"
+    period: Literal["2y", "5y", "10y", "max"] = "max"
+    executionPrice: Literal["open", "close"] = "close"
+    initialCapital: float = Field(default=100_000, gt=0)
+    commissionRate: float = Field(default=0.0005, ge=0, le=0.05)
+    slippageRate: float = Field(default=0.0005, ge=0, le=0.05)
+    cashAnnualYield: float = Field(default=0.0, ge=0, le=1)
 
 
 def _number(value) -> float | None:
@@ -323,6 +339,33 @@ def execute_paper_order(user_id: str, payload: OrderInput) -> dict:
     if result.get("status") != "SUCCESS":
         raise HTTPException(status_code=400, detail=result.get("reason", "Order failed"))
     return result
+
+
+@app.get("/api/leverage/signal")
+def leverage_signal(benchmark: Literal["QQQ", "^NDX"] = "QQQ") -> dict:
+    try:
+        return get_leverage_engine().get_signal(benchmark)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Unable to calculate leverage signal") from exc
+
+
+@app.post("/api/leverage/backtest")
+def leverage_backtest(payload: LeverageBacktestInput) -> dict:
+    config = BacktestConfig(
+        initial_capital=payload.initialCapital,
+        execution_price=payload.executionPrice,
+        commission_rate=payload.commissionRate,
+        slippage_rate=payload.slippageRate,
+        cash_annual_yield=payload.cashAnnualYield,
+    )
+    try:
+        return get_leverage_engine().run_backtest(payload.benchmark, payload.period, config)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Unable to run leverage backtest") from exc
 
 
 def _prediction_payload(row: dict, news: list[dict] | None = None) -> dict:

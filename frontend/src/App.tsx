@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
 import { MarketCharts } from './MarketCharts'
+import { LeverageEngineTab } from './LeverageEngineTab'
 import { PaperTradingTab } from './PaperTradingTab'
 import { PredictionTab } from './PredictionTab'
 import { fetchJson } from './api'
@@ -54,7 +55,7 @@ const COMPANY_NAMES: Record<string, string> = {
   TSLA: 'Tesla Inc.',
 }
 const COLORS = ['#235a91', '#2f7d73', '#e29a3f', '#9a6fb0', '#d2645a', '#7390ad']
-const TABS = ['Portfolio', 'Paper Trading', 'AI Prediction', 'Settings']
+const TABS = ['Portfolio', 'Paper Trading', 'AI Prediction', 'Leverage Engine', 'Settings']
 const TIMEFRAMES = [
   { label: '1D', period: '1d', interval: '5m' },
   { label: '1W', period: '5d', interval: '15m' },
@@ -93,7 +94,6 @@ function App() {
 
   useEffect(() => {
     if (activeTab !== 'Portfolio') return
-    setNow(Date.now())
     const timer = window.setInterval(() => setNow(Date.now()), 1_000)
     return () => window.clearInterval(timer)
   }, [activeTab])
@@ -232,7 +232,7 @@ function App() {
         ))}
       </nav>
 
-      {activeTab === 'Paper Trading' ? <PaperTradingTab /> : activeTab === 'AI Prediction' ? <PredictionTab /> : activeTab !== 'Portfolio' ? (
+      {activeTab === 'Paper Trading' ? <PaperTradingTab /> : activeTab === 'AI Prediction' ? <PredictionTab /> : activeTab === 'Leverage Engine' ? <LeverageEngineTab /> : activeTab !== 'Portfolio' ? (
         <main className="empty-module">
           <Settings size={26} />
           <h1>{activeTab}</h1>

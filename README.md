@@ -23,6 +23,13 @@
 - **Cached Results**: Supabase predictions are calculated by scheduled jobs; browser requests never train models
 - **Explainability**: Displays observed technical/regime conditions, downside risk, model version, and timestamp-safe recent news
 
+### Leverage Engine
+- **Independent Strategy**: The Tripod engine does not call or reuse the individual-stock ML prediction pipeline
+- **Regime Switching**: Uses NASDAQ-100/QQQ SMA-250, VIX MA-10, and 52-week drawdown to allocate to synthetic TQQQ, a 50/50 QQQ/QLD mix, or cash
+- **Leakage-Safe Execution**: A signal calculated from day T close is executed at the configured T+1 open or close
+- **Configurable Friction**: Commission, slippage, cash yield, and synthetic fund expense ratios are modeled explicitly
+- **Risk Metrics**: Reports CAGR, MDD, Sharpe, Sortino, Ulcer Index, total return, and rebalance count
+
 ### Historical Data Pipeline
 - **Market Collection**: Idempotent ten-year daily OHLCV collection from yfinance
 - **News Collection**: Raw NewsAPI articles are stored independently from analysis
@@ -44,11 +51,39 @@ AutoQuant/
 ├── domain/              # Core business entities (Position, Order, PredictionRequest)
 ├── adapters/            # External service wrappers (MarketData, DB, NewsProvider)
 ├── services/            # Business logic layer (Portfolio, Trading, Prediction services)
+│   └── leverage_engine.py # Independent Tripod strategy and backtest engine
 ├── ui/                  # Streamlit presentation layer (tab renderers)
 ├── tests/               # Unit tests with pytest (16 tests, 100% pass rate)
 ├── legacy/              # Original monolithic code (preserved for reference)
 └── app.py               # DI container and routing shell
 ```
+
+## Leverage Engine
+
+The React `Leverage Engine` tab calls two independent FastAPI endpoints:
+
+```text
+GET  /api/leverage/signal?benchmark=QQQ
+POST /api/leverage/backtest
+```
+
+Example backtest request:
+
+```json
+{
+	"benchmark": "QQQ",
+	"period": "max",
+	"executionPrice": "close",
+	"initialCapital": 100000,
+	"commissionRate": 0.0005,
+	"slippageRate": 0.0005,
+	"cashAnnualYield": 0.0
+}
+```
+
+The strategy keeps its previous `BULL` or `BEAR` state while price remains between 95% and 101% of SMA-250. Before the first directional observation, it starts conservatively from `BEAR`. `BULL` with VIX MA-10 below 28 and drawdown below 9% selects TQQQ. Risky `BULL`, or `BEAR` with VIX MA-10 below 18, selects 50% QQQ plus 50% QLD. The remaining `BEAR` regime selects cash.
+
+Synthetic QLD/TQQQ series apply 2x/3x leverage to each daily selected-benchmark return and deduct daily fund expenses. They are research approximations and do not reproduce tracking error, financing spreads, distributions, closures, or intraday path dependence. Yahoo's QQQ history begins in 1999, so a QQQ run cannot provide a full 35-year test. Selecting `^NDX` uses the NASDAQ-100 price index as the 1x QQQ proxy and as the synthetic leverage source for the earlier period. Every response reports `one_x_proxy` and `data_period_years`; long-history index-proxy results must not be presented as investable ETF total returns.
 
 **Design Principles:**
 - **Dependency Injection**: Services receive adapters via constructor injection

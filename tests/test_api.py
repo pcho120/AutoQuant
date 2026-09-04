@@ -234,6 +234,48 @@ def test_prediction_screener_sorts_latest_rows(monkeypatch):
     assert [row["ticker"] for row in response.json()["results"]] == ["NVDA", "AAPL"]
 
 
+def test_leverage_signal_uses_independent_engine(monkeypatch):
+    engine = Mock()
+    engine.get_signal.return_value = {
+        "as_of": "2026-09-02T00:00:00+00:00",
+        "benchmark": "QQQ",
+        "state": "BULL",
+        "allocation": "TQQQ",
+        "weights": {"QQQ": 0, "QLD": 0, "TQQQ": 1, "CASH": 0},
+        "indicators": {"ndx_close": 600, "ndx_sma250": 550, "vix_ma10": 16, "mdd_52w": -0.02},
+    }
+    monkeypatch.setattr(api, "get_leverage_engine", lambda: engine)
+
+    response = TestClient(api.app).get("/api/leverage/signal?benchmark=QQQ")
+
+    assert response.status_code == 200
+    assert response.json()["allocation"] == "TQQQ"
+    engine.get_signal.assert_called_once_with("QQQ")
+
+
+def test_leverage_backtest_maps_execution_and_cost_options(monkeypatch):
+    engine = Mock()
+    engine.run_backtest.return_value = {"metrics": {"cagr": 0.12}, "equity_curve": [], "trades": []}
+    monkeypatch.setattr(api, "get_leverage_engine", lambda: engine)
+
+    response = TestClient(api.app).post("/api/leverage/backtest", json={
+        "benchmark": "^NDX",
+        "period": "10y",
+        "executionPrice": "open",
+        "initialCapital": 50_000,
+        "commissionRate": 0.0007,
+        "slippageRate": 0.001,
+        "cashAnnualYield": 0.03,
+    })
+
+    assert response.status_code == 200
+    benchmark, period, config = engine.run_backtest.call_args.args
+    assert (benchmark, period) == ("^NDX", "10y")
+    assert config.execution_price == "open"
+    assert config.commission_rate == pytest.approx(0.0007)
+    assert config.slippage_rate == pytest.approx(0.001)
+
+
 def test_macd_scan_maps_existing_result_shape(monkeypatch):
     service = Mock()
     service.scan_macd_golden_crosses.return_value = [{
