@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Activity, Gauge, Play, Shield, TrendingDown, Zap } from 'lucide-react'
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { LeverageHelp } from './AnalysisHelp'
 import { fetchJson } from './api'
 
 type Benchmark = 'QQQ' | '^NDX'
@@ -75,7 +76,7 @@ export function LeverageEngineTab() {
     <main className="feature-page leverage-page">
       <section className="feature-heading">
         <div><span className="feature-kicker">Independent allocation engine</span><h1>Leverage Engine</h1><p>NASDAQ trend, volatility, and drawdown regime switching with next-day execution.</p></div>
-        <div className="model-badge"><Zap size={20} /><span>Tripod strategy<strong>3x · 1.5x · cash switching</strong></span></div>
+        <div className="feature-heading-tools"><div className="model-badge"><Zap size={20} /><span>Tripod strategy<strong>3x · 1.5x · cash switching</strong></span></div><LeverageHelp /></div>
       </section>
 
       <section className="leverage-signal-band">

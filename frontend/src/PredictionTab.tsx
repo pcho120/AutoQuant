@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { BrainCircuit, Newspaper, Search, ShieldAlert, Target, TrendingUp } from 'lucide-react'
+import { PredictionHelp } from './AnalysisHelp'
 import { fetchJson } from './api'
 import { TickerSearch } from './TickerSearch'
 
@@ -71,7 +72,7 @@ export function PredictionTab() {
     <main className="feature-page">
       <section className="feature-heading prediction-heading">
         <div><span className="feature-kicker">Validated market intelligence</span><h1>AI Prediction</h1><p>Five-trading-day forecasts calculated offline from timestamp-safe market data and served from Supabase.</p></div>
-        <div className="model-badge"><BrainCircuit size={20} /><span>Production model<strong>Calibrated probability · independent return model</strong></span></div>
+        <div className="feature-heading-tools"><div className="model-badge"><BrainCircuit size={20} /><span>Production model<strong>Calibrated probability · independent return model</strong></span></div><PredictionHelp /></div>
       </section>
 
       <section className="prediction-command feature-card">

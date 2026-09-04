@@ -3,6 +3,19 @@
 .feature-heading h1 { margin: 3px 0 6px; color: var(--navy); font: 700 25px/1.2 'Manrope'; }
 .feature-heading p { max-width: 670px; margin: 0; color: var(--muted); font-size: 12px; }
 .feature-kicker { color: var(--teal); font-size: 9px; font-weight: 600; text-transform: uppercase; }
+.feature-heading-tools { display: flex; align-items: center; gap: 8px; }
+.analysis-help-button, .analysis-help-close { width: 38px; height: 38px; display: grid; place-items: center; flex: 0 0 auto; padding: 0; color: var(--navy-2); background: var(--surface); border: 1px solid var(--line); border-radius: 5px; }
+.analysis-help-button:hover, .analysis-help-close:hover { color: var(--teal); border-color: var(--teal); }
+.analysis-help-backdrop { position: fixed; z-index: 100; inset: 0; display: grid; place-items: center; padding: 24px; background: #09131fc7; }
+.analysis-help-dialog { width: min(920px, 100%); max-height: min(820px, calc(100vh - 48px)); overflow: hidden; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 24px 70px #0000004d; }
+.analysis-help-dialog > header { min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 15px 18px; border-bottom: 1px solid var(--line); }
+.analysis-help-dialog > header span { color: var(--teal); font-size: 9px; font-weight: 600; text-transform: uppercase; }.analysis-help-dialog > header h2 { margin: 4px 0 0; color: var(--navy); font: 700 18px 'Manrope'; }
+.analysis-help-actions { display: flex; align-items: center; gap: 9px; }.language-switch { display: flex; }.language-switch button { height: 32px; padding: 0 11px; color: var(--muted); background: var(--surface); border: 1px solid var(--line); font-size: 10px; }.language-switch button:first-child { border-radius: 4px 0 0 4px; }.language-switch button:last-child { border-left: 0; border-radius: 0 4px 4px 0; }.language-switch button.active { color: white; background: var(--navy-2); border-color: var(--navy-2); }
+.analysis-help-close { width: 32px; height: 32px; color: var(--muted); }
+.analysis-help-content { max-height: calc(min(820px, 100vh - 48px) - 76px); padding: 18px; overflow-y: auto; }.analysis-help-summary { margin: 0; padding: 14px 16px; color: var(--ink); background: var(--canvas); border-left: 3px solid var(--teal); font-size: 12px; line-height: 1.65; }
+.analysis-help-content > section { padding: 18px 0 2px; }.analysis-help-content > section + section { border-top: 1px solid var(--line-soft); }.analysis-help-content h3 { margin: 0 0 9px; color: var(--navy); font: 700 13px 'Manrope'; }.analysis-help-content section > p { margin: 0 0 12px; color: var(--muted); font-size: 11px; line-height: 1.7; }
+.analysis-help-content dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0 0 14px; }.analysis-help-content dl > div { min-width: 0; padding: 10px 11px; background: var(--canvas); border: 1px solid var(--line-soft); }.analysis-help-content dt { color: var(--ink); font: 600 10px 'IBM Plex Mono'; }.analysis-help-content dd { margin: 5px 0 0; color: var(--muted); font-size: 10px; line-height: 1.55; }
+.analysis-help-content aside { padding: 12px 14px; color: var(--orange); background: color-mix(in srgb, var(--orange) 8%, var(--surface)); border: 1px solid color-mix(in srgb, var(--orange) 25%, var(--line)); font-size: 10px; line-height: 1.6; }
 .balance-chip, .model-badge { display: flex; align-items: center; gap: 10px; min-width: 215px; padding: 10px 13px; color: var(--navy); background: var(--surface); border: 1px solid var(--line); border-radius: 5px; }
 .balance-chip > span, .model-badge > span { display: flex; flex-direction: column; color: var(--muted); font-size: 9px; text-transform: uppercase; }
 .balance-chip strong, .model-badge strong { margin-top: 3px; color: var(--ink); font: 600 14px 'IBM Plex Mono'; text-transform: none; }
@@ -96,6 +109,7 @@
 @media (max-width: 680px) {
   .feature-page { padding: 20px 10px 38px; }
   .feature-heading { align-items: flex-start; flex-direction: column; }
+  .feature-heading-tools { width: 100%; }.feature-heading-tools .model-badge { flex: 1; }.analysis-help-backdrop { padding: 10px; }.analysis-help-dialog { max-height: calc(100vh - 20px); }.analysis-help-dialog > header { align-items: flex-start; flex-direction: column; gap: 10px; }.analysis-help-actions { width: 100%; justify-content: space-between; }.analysis-help-content { max-height: calc(100vh - 126px); padding: 13px; }.analysis-help-content dl { grid-template-columns: 1fr; }
   .balance-chip, .model-badge { width: 100%; }
   .metric-row.four, .metric-row.three { grid-template-columns: 1fr 1fr; }
   .metric-row > div:nth-child(2) { border-right: 0; }.metric-row > div { border-bottom: 1px solid var(--line-soft); }.metric-row > div:nth-last-child(-n+2) { border-bottom: 0; }
