@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from adapters import DBClient, MarketDataAdapter, NewsProvider, WebullPortfolioAdapter
 from adapters.collection_repository import CollectionRepository
-from domain.position import Order, Position
+from domain.position import Position
 from domain.prediction import PredictionRequest
 from services import PredictionService, TradingService
 from services.leverage_engine import BacktestConfig, LeverageEngineService
@@ -99,30 +99,12 @@ class PortfolioInput(BaseModel):
     positions: list[PositionInput]
 
 
-class PaperPositionInput(BaseModel):
-    ticker: str
-    quantity: float = Field(gt=0)
-    buyPrice: float = Field(ge=0)
-
-    @field_validator("ticker")
-    @classmethod
-    def normalize_ticker(cls, value: str) -> str:
-        ticker = value.strip().upper()
-        if not ticker:
-            raise ValueError("Ticker is required")
-        return ticker
-
-
-class PaperPortfolioInput(BaseModel):
-    positions: list[PaperPositionInput]
-
-
 class OrderInput(BaseModel):
     ticker: str
     action: Literal["BUY", "SELL"]
     quantity: float = Field(gt=0)
-    price: float = Field(gt=0)
-    cashBalance: float = Field(ge=0)
+    orderType: Literal["MARKET", "LIMIT"] = "MARKET"
+    limitPrice: float | None = Field(default=None, gt=0)
 
     @field_validator("ticker")
     @classmethod
@@ -301,8 +283,13 @@ def sync_webull_portfolio(user_id: str) -> dict:
 def paper_portfolio(user_id: str) -> dict:
     positions = get_db_client().fetch_positions(user_id, table_name="paper_portfolio")
     prices = get_market_data().fetch_current_prices([position.ticker for position in positions])
+    account = get_db_client().fetch_paper_account(user_id)
+    orders = get_db_client().fetch_paper_orders(user_id)
     return {
         "userId": user_id,
+        "cashBalance": account["cash_balance"],
+        "initialCash": account["initial_cash"],
+        "orders": orders,
         "positions": [
             {
                 "ticker": position.ticker,
@@ -315,27 +302,26 @@ def paper_portfolio(user_id: str) -> dict:
     }
 
 
-@app.put("/api/paper-trading/{user_id}")
-def save_paper_portfolio(user_id: str, payload: PaperPortfolioInput) -> dict:
-    positions = [
-        Position(item.ticker, item.quantity, item.buyPrice, 0.0)
-        for item in payload.positions
-    ]
-    if get_db_client().save_positions(user_id, positions, table_name="paper_portfolio") is False:
-        raise HTTPException(status_code=502, detail="Unable to save paper portfolio to Supabase")
-    return {"userId": user_id, "saved": len(positions)}
+@app.get("/api/paper-trading/quotes/{ticker}")
+def paper_trade_quote(ticker: str) -> dict:
+    try:
+        return get_market_data().fetch_trade_quote(ticker.strip().upper())
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Unable to fetch trade quote") from exc
 
 
 @app.post("/api/paper-trading/{user_id}/orders")
 def execute_paper_order(user_id: str, payload: OrderInput) -> dict:
-    order = Order(
+    result = get_trading_service().execute_order(
+        user_id=user_id,
         ticker=payload.ticker,
         action=payload.action,
         quantity=payload.quantity,
-        price=payload.price,
-        timestamp=datetime.now(),
+        order_type=payload.orderType,
+        limit_price=payload.limitPrice,
     )
-    result = get_trading_service().execute_order(user_id, order, payload.cashBalance)
     if result.get("status") != "SUCCESS":
         raise HTTPException(status_code=400, detail=result.get("reason", "Order failed"))
     return result

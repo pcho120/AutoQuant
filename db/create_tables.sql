@@ -51,6 +51,147 @@ CREATE INDEX IF NOT EXISTS idx_paper_portfolio_user_id ON paper_portfolio(user_i
 CREATE INDEX IF NOT EXISTS idx_paper_portfolio_ticker ON paper_portfolio(ticker);
 
 -- ============================================================================
+-- Paper Trading Accounts and Orders: Atomic simulated execution ledger
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS paper_accounts (
+    user_id TEXT PRIMARY KEY,
+    cash_balance DOUBLE PRECISION NOT NULL DEFAULT 100000.0 CHECK (cash_balance >= 0),
+    initial_cash DOUBLE PRECISION NOT NULL DEFAULT 100000.0 CHECK (initial_cash > 0),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS paper_orders (
+    id BIGSERIAL PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES paper_accounts(user_id) ON DELETE CASCADE,
+    ticker TEXT NOT NULL,
+    action TEXT NOT NULL CHECK (action IN ('BUY', 'SELL')),
+    order_type TEXT NOT NULL CHECK (order_type IN ('MARKET', 'LIMIT')),
+    requested_quantity DOUBLE PRECISION NOT NULL CHECK (requested_quantity > 0),
+    quantity DOUBLE PRECISION NOT NULL CHECK (quantity > 0),
+    requested_price DOUBLE PRECISION,
+    filled_price DOUBLE PRECISION NOT NULL CHECK (filled_price > 0),
+    fee DOUBLE PRECISION NOT NULL CHECK (fee >= 0),
+    quote_timestamp TIMESTAMPTZ NOT NULL,
+    execution_session TEXT NOT NULL DEFAULT 'REGULAR' CHECK (execution_session IN ('REGULAR', 'CLOSED')),
+    executed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS requested_quantity DOUBLE PRECISION;
+UPDATE paper_orders SET requested_quantity = quantity WHERE requested_quantity IS NULL;
+ALTER TABLE paper_orders ALTER COLUMN requested_quantity SET NOT NULL;
+ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS execution_session TEXT NOT NULL DEFAULT 'REGULAR';
+
+CREATE INDEX IF NOT EXISTS idx_paper_orders_user_executed
+    ON paper_orders(user_id, executed_at DESC);
+
+DROP FUNCTION IF EXISTS execute_paper_order(
+    TEXT, TEXT, TEXT, TEXT, DOUBLE PRECISION, DOUBLE PRECISION,
+    DOUBLE PRECISION, DOUBLE PRECISION, DOUBLE PRECISION, TIMESTAMPTZ
+);
+
+CREATE OR REPLACE FUNCTION execute_paper_order(
+    p_user_id TEXT,
+    p_ticker TEXT,
+    p_action TEXT,
+    p_order_type TEXT,
+    p_requested_quantity DOUBLE PRECISION,
+    p_quantity DOUBLE PRECISION,
+    p_requested_price DOUBLE PRECISION,
+    p_filled_price DOUBLE PRECISION,
+    p_fee_rate DOUBLE PRECISION,
+    p_quote_timestamp TIMESTAMPTZ,
+    p_execution_session TEXT
+) RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    account_cash DOUBLE PRECISION;
+    existing_quantity DOUBLE PRECISION;
+    existing_buy_price DOUBLE PRECISION;
+    trade_value DOUBLE PRECISION := p_quantity * p_filled_price;
+    trade_fee DOUBLE PRECISION := trade_value * p_fee_rate;
+    new_quantity DOUBLE PRECISION;
+    new_buy_price DOUBLE PRECISION;
+BEGIN
+    IF p_action NOT IN ('BUY', 'SELL') OR p_order_type NOT IN ('MARKET', 'LIMIT')
+        OR p_execution_session NOT IN ('REGULAR', 'CLOSED') THEN
+        RAISE EXCEPTION 'Invalid paper order';
+    END IF;
+    IF p_requested_quantity <= 0 OR p_quantity <= 0 OR p_quantity > p_requested_quantity
+        OR p_filled_price <= 0 OR p_fee_rate < 0 THEN
+        RAISE EXCEPTION 'Invalid paper order values';
+    END IF;
+
+    INSERT INTO paper_accounts (user_id) VALUES (p_user_id)
+    ON CONFLICT (user_id) DO NOTHING;
+
+    SELECT cash_balance INTO account_cash
+    FROM paper_accounts WHERE user_id = p_user_id FOR UPDATE;
+
+    SELECT quantity, buy_price INTO existing_quantity, existing_buy_price
+    FROM paper_portfolio
+    WHERE user_id = p_user_id AND ticker = p_ticker
+    FOR UPDATE;
+
+    existing_quantity := COALESCE(existing_quantity, 0);
+    existing_buy_price := COALESCE(existing_buy_price, 0);
+
+    IF p_action = 'BUY' THEN
+        IF account_cash < trade_value + trade_fee THEN
+            RAISE EXCEPTION 'Insufficient cash';
+        END IF;
+        new_quantity := existing_quantity + p_quantity;
+        new_buy_price := ((existing_quantity * existing_buy_price) + trade_value) / new_quantity;
+        INSERT INTO paper_portfolio (user_id, ticker, quantity, buy_price, current_price)
+        VALUES (p_user_id, p_ticker, new_quantity, new_buy_price, p_filled_price)
+        ON CONFLICT (user_id, ticker) DO UPDATE SET
+            quantity = EXCLUDED.quantity,
+            buy_price = EXCLUDED.buy_price,
+            current_price = EXCLUDED.current_price;
+        account_cash := account_cash - trade_value - trade_fee;
+    ELSE
+        IF existing_quantity < p_quantity THEN
+            RAISE EXCEPTION 'Insufficient quantity';
+        END IF;
+        new_quantity := existing_quantity - p_quantity;
+        IF new_quantity = 0 THEN
+            DELETE FROM paper_portfolio WHERE user_id = p_user_id AND ticker = p_ticker;
+        ELSE
+            UPDATE paper_portfolio
+            SET quantity = new_quantity, current_price = p_filled_price
+            WHERE user_id = p_user_id AND ticker = p_ticker;
+        END IF;
+        account_cash := account_cash + trade_value - trade_fee;
+    END IF;
+
+    UPDATE paper_accounts
+    SET cash_balance = account_cash, updated_at = CURRENT_TIMESTAMP
+    WHERE user_id = p_user_id;
+
+    INSERT INTO paper_orders (
+        user_id, ticker, action, order_type, requested_quantity, quantity, requested_price,
+        filled_price, fee, quote_timestamp, execution_session
+    ) VALUES (
+        p_user_id, p_ticker, p_action, p_order_type, p_requested_quantity, p_quantity, p_requested_price,
+        p_filled_price, trade_fee, p_quote_timestamp, p_execution_session
+    );
+
+    RETURN jsonb_build_object(
+        'status', 'SUCCESS',
+        'remaining_cash', account_cash,
+        'fee', trade_fee,
+        'filled_price', p_filled_price,
+        'requested_quantity', p_requested_quantity,
+        'quantity', p_quantity,
+        'partial_fill', p_quantity < p_requested_quantity,
+        'execution_session', p_execution_session
+    );
+END;
+$$;
+
+-- ============================================================================
 -- Market Data Collection: Raw OHLCV candles from external providers
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS market_prices (

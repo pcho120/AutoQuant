@@ -128,6 +128,59 @@ class DBClient:
         except Exception:
             return False
 
+    def fetch_paper_account(self, user_id: str) -> dict:
+        response = (
+            self.supabase.table("paper_accounts")
+            .select("cash_balance,initial_cash,updated_at")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        if response.data:
+            return response.data[0]
+        response = self.supabase.table("paper_accounts").insert({"user_id": user_id}).execute()
+        return response.data[0]
+
+    def fetch_paper_orders(self, user_id: str, limit: int = 20) -> list[dict]:
+        response = (
+            self.supabase.table("paper_orders")
+            .select("ticker,action,order_type,requested_quantity,quantity,requested_price,filled_price,fee,quote_timestamp,execution_session,executed_at")
+            .eq("user_id", user_id)
+            .order("executed_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return response.data or []
+
+    def execute_paper_order(
+        self,
+        user_id: str,
+        ticker: str,
+        action: str,
+        order_type: str,
+        requested_quantity: float,
+        filled_quantity: float,
+        requested_price: float | None,
+        filled_price: float,
+        fee_rate: float,
+        quote_timestamp: str,
+        execution_session: str,
+    ) -> dict:
+        response = self.supabase.rpc("execute_paper_order", {
+            "p_user_id": user_id,
+            "p_ticker": ticker,
+            "p_action": action,
+            "p_order_type": order_type,
+            "p_requested_quantity": requested_quantity,
+            "p_quantity": filled_quantity,
+            "p_requested_price": requested_price,
+            "p_filled_price": filled_price,
+            "p_fee_rate": fee_rate,
+            "p_quote_timestamp": quote_timestamp,
+            "p_execution_session": execution_session,
+        }).execute()
+        return response.data
+
     def update_position(self, user_id: str, ticker: str, quantity: float, buy_price: float, table_name: str = "portfolio") -> bool:
         """
         Update a single position in the database.

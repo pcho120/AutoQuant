@@ -12,9 +12,12 @@
 - **Interactive Charting**: Plotly-powered visualizations with allocation breakdown
 
 ### Paper Trading
-- **Simulated Order Execution**: Test BUY/SELL strategies with $100k virtual cash
-- **Transaction Fee Modeling**: 0.1% fee calculation on all trades
-- **Order History Tracking**: Persistent order records with timestamps
+- **Server-Priced Execution**: Market and immediately marketable limit orders use the latest regular-session yfinance one-minute quote
+- **Realistic Friction**: Market orders include 0.05% simulated slippage and every fill includes a 0.1% transaction fee
+- **Persistent Account State**: Virtual cash, weighted-average positions, and completed order history are stored in Supabase
+- **Atomic Fills**: Cash, holdings, and order history update together in one PostgreSQL transaction
+- **Market Guard**: SELL orders require a fresh regular-session quote; closed-session BUY orders use the most recent regular-market close without slippage
+- **Order Semantics**: Limit orders are immediate-or-cancel; large orders are partially filled using 1% of the latest one-minute volume as simulated available liquidity
 
 ### AI Prediction Engine
 - **Calibrated Direction Model**: Compares Logistic Regression, HistGradientBoosting, and Random Forest on out-of-sample Brier score
@@ -178,6 +181,8 @@ Production scheduling is split by workload:
 - `.github/workflows/model-evaluation.yml`: Saturdays at 14:30 UTC. Rebuilds features, performs purged walk-forward evaluation, stores the new artifact/evaluation, and refreshes predictions.
 
 Manual workflow dispatch bypasses the market-time gate. Configure repository secrets `SUPABASE_URL`, `SUPABASE_KEY`, and `NEWS_API_KEY`; optionally configure repository variable `COLLECTION_TICKERS`.
+
+After pulling a paper-trading schema update, run the latest `db/create_tables.sql` in the Supabase SQL Editor. It creates `paper_accounts`, `paper_orders`, and the transactional `execute_paper_order` function required by the React Paper Trading tab.
 
 ### Stored data semantics
 

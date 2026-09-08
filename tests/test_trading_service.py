@@ -1,8 +1,7 @@
 import pytest
 from unittest.mock import Mock
-from datetime import datetime
 from services.trading_service import TradingService
-from domain.position import Order, Position
+from domain.position import Position
 
 
 @pytest.fixture
@@ -24,101 +23,136 @@ def trading_service(mock_db, mock_market):
 
 
 def test_execute_order_buy_success(trading_service, mock_db):
-    """Test successful BUY order execution."""
-    order = Order(
-        ticker="AAPL",
-        action="BUY",
-        quantity=10,
-        price=150.0,
-        timestamp=datetime.now()
-    )
-    cash_balance = 2000.0
-    
-    result = trading_service.execute_order(user_id="user123", order=order, cash_balance=cash_balance)
-    
+    trading_service.market.fetch_trade_quote.return_value = {
+        "price": 150.0, "timestamp": "2026-09-04T15:30:00+00:00", "marketOpen": True,
+        "regularSession": True, "afterHoursBuyAllowed": False,
+    }
+    mock_db.execute_paper_order.return_value = {
+        "status": "SUCCESS", "remaining_cash": 8498.25, "fee": 1.50075,
+        "filled_price": 150.075, "quantity": 10,
+    }
+
+    result = trading_service.execute_order("user123", "AAPL", "BUY", 10, "MARKET")
+
     assert result["status"] == "SUCCESS"
-    assert "remaining_cash" in result
-    assert "fee" in result
-    
-    # Total cost = (10 * 150) + fee
-    # Fee = 10 * 150 * 0.001 = 1.5
-    # Total cost = 1500 + 1.5 = 1501.5
-    # Remaining cash = 2000 - 1501.5 = 498.5
-    
-    assert abs(result["remaining_cash"] - 498.5) < 0.01
-    assert abs(result["fee"] - 1.5) < 0.01
-    mock_db.save_order.assert_called_once_with("user123", order)
+    assert result["filled_price"] == pytest.approx(150.075)
+    assert result["quote_price"] == 150.0
+    assert mock_db.execute_paper_order.call_args.kwargs["filled_price"] == pytest.approx(150.075)
 
 
 def test_execute_order_buy_insufficient_cash(trading_service, mock_db):
-    """Test BUY order failure due to insufficient cash."""
-    order = Order(
-        ticker="AAPL",
-        action="BUY",
-        quantity=10,
-        price=150.0,
-        timestamp=datetime.now()
-    )
-    cash_balance = 100.0  # Not enough cash
-    
-    result = trading_service.execute_order(user_id="user123", order=order, cash_balance=cash_balance)
-    
+    trading_service.market.fetch_trade_quote.return_value = {
+        "price": 150.0, "timestamp": "2026-09-04T15:30:00+00:00", "marketOpen": True,
+        "regularSession": True, "afterHoursBuyAllowed": False,
+    }
+    mock_db.execute_paper_order.side_effect = Exception("Insufficient cash")
+
+    result = trading_service.execute_order("user123", "AAPL", "BUY", 10, "MARKET")
+
     assert result["status"] == "FAILED"
     assert result["reason"] == "Insufficient cash"
-    mock_db.save_order.assert_not_called()
 
 
 def test_execute_order_sell_success(trading_service, mock_db):
-    """Test successful SELL order execution."""
-    # Mock existing position
-    existing_position = Position(ticker="AAPL", quantity=20, buy_price=140.0, current_price=150.0)
-    mock_db.fetch_positions.return_value = [existing_position]
-    
-    order = Order(
-        ticker="AAPL",
-        action="SELL",
-        quantity=10,
-        price=160.0,
-        timestamp=datetime.now()
-    )
-    cash_balance = 1000.0
-    
-    result = trading_service.execute_order(user_id="user123", order=order, cash_balance=cash_balance)
-    
+    trading_service.market.fetch_trade_quote.return_value = {
+        "price": 160.0, "timestamp": "2026-09-04T15:30:00+00:00", "marketOpen": True,
+        "regularSession": True, "afterHoursBuyAllowed": False,
+    }
+    mock_db.execute_paper_order.return_value = {
+        "status": "SUCCESS", "remaining_cash": 11598.4, "fee": 1.5992,
+        "filled_price": 159.92, "quantity": 10,
+    }
+
+    result = trading_service.execute_order("user123", "AAPL", "SELL", 10, "MARKET")
+
     assert result["status"] == "SUCCESS"
-    assert "remaining_cash" in result
-    assert "fee" in result
-    
-    # Sale proceeds = (10 * 160) - fee
-    # Fee = 10 * 160 * 0.001 = 1.6
-    # Sale proceeds = 1600 - 1.6 = 1598.4
-    # Remaining cash = 1000 + 1598.4 = 2598.4
-    
-    assert abs(result["remaining_cash"] - 2598.4) < 0.01
-    assert abs(result["fee"] - 1.6) < 0.01
-    mock_db.save_order.assert_called_once_with("user123", order)
+    assert mock_db.execute_paper_order.call_args.kwargs["filled_price"] == pytest.approx(159.92)
 
 
 def test_execute_order_sell_insufficient_quantity(trading_service, mock_db):
-    """Test SELL order failure due to insufficient quantity."""
-    # Mock existing position with less quantity
-    existing_position = Position(ticker="AAPL", quantity=5, buy_price=140.0, current_price=150.0)
-    mock_db.fetch_positions.return_value = [existing_position]
-    
-    order = Order(
-        ticker="AAPL",
-        action="SELL",
-        quantity=10,  # Trying to sell more than owned
-        price=160.0,
-        timestamp=datetime.now()
-    )
-    cash_balance = 1000.0
-    
-    result = trading_service.execute_order(user_id="user123", order=order, cash_balance=cash_balance)
-    
+    trading_service.market.fetch_trade_quote.return_value = {
+        "price": 160.0, "timestamp": "2026-09-04T15:30:00+00:00", "marketOpen": True,
+        "regularSession": True, "afterHoursBuyAllowed": False,
+    }
+    mock_db.execute_paper_order.side_effect = Exception("Insufficient quantity")
+
+    result = trading_service.execute_order("user123", "AAPL", "SELL", 10, "MARKET")
+
     assert result["status"] == "FAILED"
     assert result["reason"] == "Insufficient quantity"
-    mock_db.save_order.assert_not_called()
+
+
+def test_limit_order_requires_reachable_price(trading_service, mock_db):
+    trading_service.market.fetch_trade_quote.return_value = {
+        "price": 150.0, "timestamp": "2026-09-04T15:30:00+00:00", "marketOpen": True,
+        "regularSession": True, "afterHoursBuyAllowed": False,
+    }
+
+    result = trading_service.execute_order("user123", "AAPL", "BUY", 1, "LIMIT", 149.0)
+
+    assert result == {"status": "FAILED", "reason": "Limit price has not been reached"}
+    mock_db.execute_paper_order.assert_not_called()
+
+
+def test_stale_quote_rejects_order(trading_service, mock_db):
+    trading_service.market.fetch_trade_quote.return_value = {
+        "price": 150.0, "timestamp": "2026-09-04T15:30:00+00:00", "marketOpen": False,
+        "regularSession": True, "afterHoursBuyAllowed": False,
+    }
+
+    result = trading_service.execute_order("user123", "AAPL", "BUY", 1, "MARKET")
+
+    assert result == {"status": "FAILED", "reason": "The live market quote is stale"}
+    mock_db.execute_paper_order.assert_not_called()
+
+
+def test_large_order_is_capped_by_simulated_liquidity(trading_service, mock_db):
+    trading_service.market.fetch_trade_quote.return_value = {
+        "price": 150.0, "timestamp": "2026-09-04T15:30:00+00:00",
+        "marketOpen": True, "regularSession": True, "afterHoursBuyAllowed": False,
+        "availableQuantity": 25.0,
+    }
+    mock_db.execute_paper_order.return_value = {
+        "status": "SUCCESS", "remaining_cash": 96000, "fee": 3.75,
+        "filled_price": 150.075, "requested_quantity": 100,
+        "quantity": 25, "partial_fill": True,
+    }
+
+    result = trading_service.execute_order("user123", "AAPL", "BUY", 100, "MARKET")
+
+    assert result["partial_fill"] is True
+    assert mock_db.execute_paper_order.call_args.kwargs["requested_quantity"] == 100
+    assert mock_db.execute_paper_order.call_args.kwargs["filled_quantity"] == 25
+
+
+def test_closed_session_buy_fills_at_last_close_without_slippage(trading_service, mock_db):
+    trading_service.market.fetch_trade_quote.return_value = {
+        "price": 150.0, "timestamp": "2026-09-04T20:00:00+00:00", "marketOpen": False,
+        "regularSession": False, "afterHoursBuyAllowed": True, "availableQuantity": 25.0,
+    }
+    mock_db.execute_paper_order.return_value = {
+        "status": "SUCCESS", "remaining_cash": 98498.5, "fee": 1.5,
+        "filled_price": 150.0, "requested_quantity": 10,
+        "quantity": 10, "partial_fill": False,
+    }
+
+    result = trading_service.execute_order("user123", "AAPL", "BUY", 10, "MARKET")
+
+    assert result["execution_session"] == "CLOSED"
+    assert mock_db.execute_paper_order.call_args.kwargs["filled_price"] == 150.0
+    assert mock_db.execute_paper_order.call_args.kwargs["execution_session"] == "CLOSED"
+
+
+def test_closed_session_sell_is_rejected(trading_service, mock_db):
+    trading_service.market.fetch_trade_quote.return_value = {
+        "price": 150.0, "timestamp": "2026-09-04T20:00:00+00:00", "marketOpen": False,
+        "regularSession": False, "afterHoursBuyAllowed": True,
+    }
+
+    result = trading_service.execute_order("user123", "AAPL", "SELL", 10, "MARKET")
+
+    assert result == {"status": "FAILED", "reason": "Sell orders require an open regular market"}
+    mock_db.execute_paper_order.assert_not_called()
 
 
 def test_calculate_pnl_basic(trading_service):

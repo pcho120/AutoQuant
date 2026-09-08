@@ -8,12 +8,11 @@ This test suite ensures that:
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock, call
+from unittest.mock import Mock
 import pandas as pd
 from services.portfolio_service import PortfolioService
 from services.trading_service import TradingService
-from domain.position import Position, Order, Portfolio
-from datetime import datetime
+from domain.position import Position
 
 
 @pytest.fixture
@@ -25,6 +24,10 @@ def mock_db():
     db.update_position = Mock(return_value=True)
     db.delete_position = Mock(return_value=True)
     db.save_order = Mock(return_value=True)
+    db.execute_paper_order = Mock(return_value={
+        "status": "SUCCESS", "remaining_cash": 10000.0, "fee": 1.0,
+        "filled_price": 100.0, "quantity": 1.0,
+    })
     return db
 
 
@@ -33,6 +36,10 @@ def mock_market():
     """Mock market data adapter."""
     market = Mock()
     market.fetch_current_prices = Mock(return_value={})
+    market.fetch_trade_quote = Mock(return_value={
+        "price": 100.0, "timestamp": "2026-09-04T15:30:00+00:00", "marketOpen": True,
+        "regularSession": True, "afterHoursBuyAllowed": False,
+    })
     return market
 
 
@@ -124,73 +131,33 @@ def test_portfolio_service_never_calls_paper_portfolio_table(mock_db, mock_marke
 # ============================================================================
 
 def test_trading_service_sell_order_uses_paper_portfolio_table(mock_db, mock_market):
-    """Verify TradingService.execute_order(SELL) routes to 'paper_portfolio' table."""
-    # Arrange
-    existing_position = Position(ticker="AAPL", quantity=20.0, buy_price=140.0, current_price=150.0)
-    mock_db.fetch_positions.return_value = [existing_position]
-    
+    """Verify SELL execution routes through the isolated paper-order RPC."""
     service = TradingService(db=mock_db, market=mock_market)
-    order = Order(
-        ticker="AAPL",
-        action="SELL",
-        quantity=10.0,
-        price=160.0,
-        timestamp=datetime.now()
-    )
-    
-    # Act
-    result = service.execute_order(user_id="test_user", order=order, cash_balance=1000.0)
-    
-    # Assert
+    result = service.execute_order("test_user", "AAPL", "SELL", 10.0, "MARKET")
+
     assert result["status"] == "SUCCESS"
-    mock_db.fetch_positions.assert_called_once_with("test_user", table_name="paper_portfolio")
-    mock_db.save_order.assert_called_once()
+    assert mock_db.execute_paper_order.call_args.kwargs["action"] == "SELL"
+    mock_db.fetch_positions.assert_not_called()
 
 
 def test_trading_service_buy_order_does_not_fetch_positions(mock_db, mock_market):
-    """Verify TradingService.execute_order(BUY) does not fetch positions (no table access)."""
-    # Arrange
+    """Verify BUY validation and mutation are delegated atomically to the paper RPC."""
     service = TradingService(db=mock_db, market=mock_market)
-    order = Order(
-        ticker="AAPL",
-        action="BUY",
-        quantity=10.0,
-        price=150.0,
-        timestamp=datetime.now()
-    )
-    
-    # Act
-    result = service.execute_order(user_id="test_user", order=order, cash_balance=2000.0)
-    
-    # Assert
+    result = service.execute_order("test_user", "AAPL", "BUY", 10.0, "MARKET")
+
     assert result["status"] == "SUCCESS"
-    mock_db.fetch_positions.assert_not_called()  # BUY does not need position validation
-    mock_db.save_order.assert_called_once()
+    mock_db.fetch_positions.assert_not_called()
+    mock_db.execute_paper_order.assert_called_once()
 
 
 def test_trading_service_never_calls_portfolio_table(mock_db, mock_market):
-    """Verify TradingService never accesses 'portfolio' table."""
-    # Arrange
-    existing_position = Position(ticker="AAPL", quantity=20.0, buy_price=140.0, current_price=150.0)
-    mock_db.fetch_positions.return_value = [existing_position]
-    
+    """Verify TradingService never accesses either position table directly."""
     service = TradingService(db=mock_db, market=mock_market)
-    order = Order(
-        ticker="AAPL",
-        action="SELL",
-        quantity=10.0,
-        price=160.0,
-        timestamp=datetime.now()
-    )
-    
-    # Act
-    service.execute_order(user_id="test_user", order=order, cash_balance=1000.0)
-    
-    # Assert - check all calls to verify none use "portfolio"
-    for call_obj in mock_db.fetch_positions.call_args_list:
-        if len(call_obj[1]) > 0 and "table_name" in call_obj[1]:
-            assert call_obj[1]["table_name"] != "portfolio", \
-                "TradingService must never access portfolio table"
+    service.execute_order("test_user", "AAPL", "SELL", 10.0, "MARKET")
+
+    mock_db.fetch_positions.assert_not_called()
+    mock_db.save_positions.assert_not_called()
+    mock_db.execute_paper_order.assert_called_once()
 
 
 # ============================================================================
@@ -230,17 +197,8 @@ def test_no_cross_contamination_portfolio_and_paper_trading_isolation(mock_db, m
     portfolio_service._get_portfolio_data.clear()
     portfolio = portfolio_service.get_portfolio(user_id="test_user")
     
-    sell_order = Order(
-        ticker="MSFT",
-        action="SELL",
-        quantity=10.0,
-        price=310.0,
-        timestamp=datetime.now()
-    )
     trade_result = trading_service.execute_order(
-        user_id="test_user",
-        order=sell_order,
-        cash_balance=5000.0
+        "test_user", "MSFT", "SELL", 10.0, "MARKET"
     )
     
     # Assert - Verify correct table routing
@@ -250,16 +208,8 @@ def test_no_cross_contamination_portfolio_and_paper_trading_isolation(mock_db, m
     assert trade_result["status"] == "SUCCESS"  # Paper trading succeeded
     
     # Verify calls routed to correct tables
-    fetch_calls = mock_db.fetch_positions.call_args_list
-    assert len(fetch_calls) == 2
-    
-    # First call: PortfolioService → portfolio table
-    assert fetch_calls[0][0][0] == "test_user"
-    assert fetch_calls[0][1]["table_name"] == "portfolio"
-    
-    # Second call: TradingService → paper_portfolio table
-    assert fetch_calls[1][0][0] == "test_user"
-    assert fetch_calls[1][1]["table_name"] == "paper_portfolio"
+    mock_db.fetch_positions.assert_called_once_with("test_user", table_name="portfolio")
+    mock_db.execute_paper_order.assert_called_once()
 
 
 def test_isolation_portfolio_update_does_not_affect_paper_trading(mock_db, mock_market):
@@ -297,32 +247,10 @@ def test_isolation_paper_trading_sell_does_not_affect_portfolio(mock_db, mock_ma
     """
     Verify that paper trading SELL orders do not query or modify portfolio table.
     """
-    # Arrange
-    paper_position = Position(ticker="TSLA", quantity=30.0, buy_price=600.0, current_price=700.0)
-    mock_db.fetch_positions.return_value = [paper_position]
-    
     trading_service = TradingService(db=mock_db, market=mock_market)
-    order = Order(
-        ticker="TSLA",
-        action="SELL",
-        quantity=15.0,
-        price=720.0,
-        timestamp=datetime.now()
-    )
-    
-    # Act
-    result = trading_service.execute_order(user_id="test_user", order=order, cash_balance=10000.0)
-    
-    # Assert
+    result = trading_service.execute_order("test_user", "TSLA", "SELL", 15.0, "MARKET")
+
     assert result["status"] == "SUCCESS"
-    
-    # Verify fetch_positions was called with paper_portfolio table
-    fetch_call = mock_db.fetch_positions.call_args
-    assert fetch_call[0][0] == "test_user"
-    assert fetch_call[1]["table_name"] == "paper_portfolio"
-    
-    # Verify no calls were made to portfolio table
-    for call_obj in mock_db.fetch_positions.call_args_list:
-        if len(call_obj[1]) > 0 and "table_name" in call_obj[1]:
-            assert call_obj[1]["table_name"] != "portfolio", \
-                "Paper trading must not access portfolio table"
+    mock_db.fetch_positions.assert_not_called()
+    mock_db.save_positions.assert_not_called()
+    mock_db.execute_paper_order.assert_called_once()

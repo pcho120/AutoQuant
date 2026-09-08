@@ -1,5 +1,5 @@
-from typing import Dict, List
-from domain.position import Order, Position
+from typing import List
+from domain.position import Position
 
 
 class TradingService:
@@ -9,6 +9,7 @@ class TradingService:
     """
 
     FEE_RATE = 0.001  # 0.1% transaction fee
+    SLIPPAGE_RATE = 0.0005  # 0.05% simulated market-order slippage
 
     def __init__(self, db, market):
         """
@@ -21,74 +22,72 @@ class TradingService:
         self.db = db
         self.market = market
 
-    def execute_order(self, user_id: str, order: Order, cash_balance: float) -> dict:
-        """
-        Execute a trading order with validation.
+    def execute_order(
+        self,
+        user_id: str,
+        ticker: str,
+        action: str,
+        quantity: float,
+        order_type: str,
+        limit_price: float | None = None,
+    ) -> dict:
+        quote = self.market.fetch_trade_quote(ticker)
+        regular_session = quote["regularSession"]
+        closed_session_buy = action == "BUY" and quote["afterHoursBuyAllowed"]
+        if action == "SELL" and not quote["marketOpen"]:
+            return {"status": "FAILED", "reason": "Sell orders require an open regular market"}
+        if action == "BUY" and regular_session and not quote["marketOpen"]:
+            return {"status": "FAILED", "reason": "The live market quote is stale"}
+        if action == "BUY" and not regular_session and not closed_session_buy:
+            return {"status": "FAILED", "reason": "No recent closing price is available"}
 
-        Args:
-            user_id: User identifier
-            order: Order object to execute
-            cash_balance: Current cash balance
-
-        Returns:
-            Dict with keys:
-                - status: "SUCCESS" or "FAILED"
-                - reason: Failure reason (if FAILED)
-                - remaining_cash: Cash after order (if SUCCESS)
-                - fee: Transaction fee charged
-        """
-        # Calculate transaction fee
-        fee = order.quantity * order.price * self.FEE_RATE
-        order.fee = fee
-
-        if order.action == "BUY":
-            total_cost = (order.quantity * order.price) + fee
-            
-            # Validate sufficient cash
-            if total_cost > cash_balance:
-                return {
-                    "status": "FAILED",
-                    "reason": "Insufficient cash"
-                }
-            
-            # Execute buy order
-            remaining_cash = cash_balance - total_cost
-            self.db.save_order(user_id, order)
-            
-            return {
-                "status": "SUCCESS",
-                "remaining_cash": remaining_cash,
-                "fee": fee
-            }
-
-        elif order.action == "SELL":
-            # Fetch current positions to validate quantity
-            positions = self.db.fetch_positions(user_id, table_name="paper_portfolio")
-            holding = next((p for p in positions if p.ticker == order.ticker), None)
-            
-            # Validate sufficient quantity
-            if holding is None or holding.quantity < order.quantity:
-                return {
-                    "status": "FAILED",
-                    "reason": "Insufficient quantity"
-                }
-            
-            # Execute sell order
-            sale_proceeds = (order.quantity * order.price) - fee
-            remaining_cash = cash_balance + sale_proceeds
-            self.db.save_order(user_id, order)
-            
-            return {
-                "status": "SUCCESS",
-                "remaining_cash": remaining_cash,
-                "fee": fee
-            }
-
+        quote_price = quote["price"]
+        if order_type == "LIMIT":
+            if limit_price is None:
+                return {"status": "FAILED", "reason": "Limit price is required"}
+            can_fill = quote_price <= limit_price if action == "BUY" else quote_price >= limit_price
+            if not can_fill:
+                return {"status": "FAILED", "reason": "Limit price has not been reached"}
+            filled_price = quote_price
         else:
-            return {
-                "status": "FAILED",
-                "reason": f"Unknown action: {order.action}"
-            }
+            if closed_session_buy:
+                filled_price = quote_price
+            else:
+                direction = 1 if action == "BUY" else -1
+                filled_price = quote_price * (1 + direction * self.SLIPPAGE_RATE)
+
+        filled_quantity = min(quantity, quote.get("availableQuantity", quantity))
+        if filled_quantity <= 0:
+            return {"status": "FAILED", "reason": "No executable market liquidity is available"}
+
+        execution_session = "CLOSED" if closed_session_buy else "REGULAR"
+        try:
+            result = self.db.execute_paper_order(
+                user_id=user_id,
+                ticker=ticker,
+                action=action,
+                order_type=order_type,
+                requested_quantity=quantity,
+                filled_quantity=filled_quantity,
+                requested_price=limit_price,
+                filled_price=filled_price,
+                fee_rate=self.FEE_RATE,
+                quote_timestamp=quote["timestamp"],
+                execution_session=execution_session,
+            )
+        except Exception as exc:
+            message = str(exc)
+            if "Insufficient cash" in message:
+                return {"status": "FAILED", "reason": "Insufficient cash"}
+            if "Insufficient quantity" in message:
+                return {"status": "FAILED", "reason": "Insufficient quantity"}
+            raise
+        return {
+            **result,
+            "quote_price": quote_price,
+            "quote_timestamp": quote["timestamp"],
+            "execution_session": execution_session,
+        }
 
     def calculate_pnl(self, positions: List[Position]) -> dict:
         """

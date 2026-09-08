@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 import pandas as pd
+from datetime import datetime, timedelta, timezone
 from adapters.market_data import MarketDataAdapter
 
 
@@ -106,3 +107,48 @@ def test_fetch_ticker_info(market_adapter):
         assert result == mock_info
         assert result['symbol'] == 'AAPL'
         assert result['sector'] == 'Technology'
+
+
+    def test_fetch_trade_quote_returns_fresh_regular_session_price(market_adapter):
+        now = datetime(2026, 9, 4, 15, 31, tzinfo=timezone.utc)
+        timestamp = pd.Timestamp(now - timedelta(minutes=1))
+        history = pd.DataFrame({"Close": [151.25], "Volume": [5000]}, index=pd.DatetimeIndex([timestamp]))
+
+        with patch("adapters.market_data.yf.Ticker") as mock_ticker, patch("adapters.market_data.datetime") as mock_datetime:
+            mock_datetime.now.return_value = now
+            mock_ticker.return_value.history.return_value = history
+            quote = market_adapter.fetch_trade_quote("AAPL")
+
+        assert quote["ticker"] == "AAPL"
+        assert quote["price"] == 151.25
+        assert quote["marketOpen"] is True
+        assert quote["availableQuantity"] == 50
+        mock_ticker.return_value.history.assert_called_once_with(
+            period="1d", interval="1m", prepost=False, timeout=15.0,
+        )
+
+
+    def test_fetch_trade_quote_marks_old_price_as_closed(market_adapter):
+        now = datetime(2026, 9, 4, 15, 31, tzinfo=timezone.utc)
+        timestamp = pd.Timestamp(now - timedelta(hours=2))
+        history = pd.DataFrame({"Close": [151.25]}, index=pd.DatetimeIndex([timestamp]))
+
+        with patch("adapters.market_data.yf.Ticker") as mock_ticker, patch("adapters.market_data.datetime") as mock_datetime:
+            mock_datetime.now.return_value = now
+            mock_ticker.return_value.history.return_value = history
+            quote = market_adapter.fetch_trade_quote("AAPL")
+
+        assert quote["marketOpen"] is False
+
+
+    def test_fetch_trade_quote_marks_after_hours_as_closed(market_adapter):
+        now = datetime(2026, 9, 4, 20, 5, tzinfo=timezone.utc)
+        timestamp = pd.Timestamp(now - timedelta(minutes=1))
+        history = pd.DataFrame({"Close": [151.25], "Volume": [5000]}, index=pd.DatetimeIndex([timestamp]))
+
+        with patch("adapters.market_data.yf.Ticker") as mock_ticker, patch("adapters.market_data.datetime") as mock_datetime:
+            mock_datetime.now.return_value = now
+            mock_ticker.return_value.history.return_value = history
+            quote = market_adapter.fetch_trade_quote("AAPL")
+
+        assert quote["marketOpen"] is False

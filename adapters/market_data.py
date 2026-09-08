@@ -1,5 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, time, timezone
 from typing import List, Dict, Optional
+from zoneinfo import ZoneInfo
 import yfinance as yf
 import pandas as pd
 
@@ -50,6 +52,41 @@ class MarketDataAdapter:
                     prices[ticker] = price
 
         return prices
+
+    def fetch_trade_quote(self, ticker: str) -> dict:
+        """Return the latest regular-session one-minute quote for simulated execution."""
+        history = yf.Ticker(ticker).history(
+            period="5d",
+            interval="1m",
+            prepost=False,
+            timeout=self.request_timeout,
+        )
+        if history.empty or "Close" not in history:
+            raise ValueError(f"No trade quote is available for {ticker}")
+
+        timestamp = pd.Timestamp(history.index[-1])
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.tz_localize("UTC")
+        timestamp = timestamp.tz_convert("UTC")
+        now = datetime.now(timezone.utc)
+        age_seconds = (now - timestamp.to_pydatetime()).total_seconds()
+        eastern_now = now.astimezone(ZoneInfo("America/New_York"))
+        regular_session = (
+            eastern_now.weekday() < 5
+            and time(9, 30) <= eastern_now.time().replace(tzinfo=None) < time(16, 0)
+        )
+        quote_fresh = -60 <= age_seconds <= 1800
+        closing_price_available = 0 <= age_seconds <= 7 * 24 * 60 * 60
+        return {
+            "ticker": ticker.upper(),
+            "price": float(history["Close"].iloc[-1]),
+            "timestamp": timestamp.isoformat(),
+            "marketOpen": regular_session and quote_fresh,
+            "regularSession": regular_session,
+            "afterHoursBuyAllowed": not regular_session and closing_price_available,
+            "availableQuantity": max(0.0, float(history["Volume"].iloc[-1]) * 0.01)
+            if "Volume" in history else 0.0,
+        }
 
     def fetch_historical_data(
         self, ticker: str, period: str = "1mo", interval: str = "1d"

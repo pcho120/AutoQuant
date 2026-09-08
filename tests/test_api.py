@@ -122,6 +122,8 @@ def test_sync_webull_portfolio_reports_supabase_failure(monkeypatch):
 def test_paper_portfolio_uses_isolated_table_and_live_prices(monkeypatch):
     database = Mock()
     database.fetch_positions.return_value = [Position("AAPL", 3, 150, 0)]
+    database.fetch_paper_account.return_value = {"cash_balance": 90000, "initial_cash": 100000}
+    database.fetch_paper_orders.return_value = []
     market = Mock()
     market.fetch_current_prices.return_value = {"AAPL": 210.0}
     monkeypatch.setattr(api, "get_db_client", lambda: database)
@@ -131,37 +133,36 @@ def test_paper_portfolio_uses_isolated_table_and_live_prices(monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["positions"][0]["currentPrice"] == 210.0
+    assert response.json()["cashBalance"] == 90000
     database.fetch_positions.assert_called_once_with("user123", table_name="paper_portfolio")
 
 
-def test_save_paper_portfolio_replaces_isolated_holdings(monkeypatch):
-    database = Mock()
-    monkeypatch.setattr(api, "get_db_client", lambda: database)
-
+def test_paper_portfolio_cannot_be_overwritten_directly():
     response = TestClient(api.app).put(
         "/api/paper-trading/user123",
         json={"positions": [{"ticker": " tsla ", "quantity": 2, "buyPrice": 0}]},
     )
 
-    assert response.status_code == 200
-    database.save_positions.assert_called_once_with(
-        "user123", [Position("TSLA", 2, 0, 0.0)], table_name="paper_portfolio",
-    )
+    assert response.status_code == 405
 
 
 def test_execute_paper_order_uses_existing_trading_service(monkeypatch):
     service = Mock()
-    service.execute_order.return_value = {"status": "SUCCESS", "remaining_cash": 8498.5, "fee": 1.5}
+    service.execute_order.return_value = {
+        "status": "SUCCESS", "remaining_cash": 8498.5, "fee": 1.5, "filled_price": 150.0,
+    }
     monkeypatch.setattr(api, "get_trading_service", lambda: service)
 
     response = TestClient(api.app).post(
         "/api/paper-trading/user123/orders",
-        json={"ticker": " aapl ", "action": "BUY", "quantity": 10, "price": 150, "cashBalance": 10000},
+        json={"ticker": " aapl ", "action": "BUY", "quantity": 10, "orderType": "MARKET"},
     )
 
     assert response.status_code == 200
-    order = service.execute_order.call_args.args[1]
-    assert (order.ticker, order.action, order.quantity, order.price) == ("AAPL", "BUY", 10, 150)
+    service.execute_order.assert_called_once_with(
+        user_id="user123", ticker="AAPL", action="BUY", quantity=10,
+        order_type="MARKET", limit_price=None,
+    )
 
 
 def cached_prediction(ticker="AAPL", expected_return=0.05, probability_up=0.72):
