@@ -204,6 +204,15 @@ def test_analyzed_news_is_not_analyzed_again():
     assert client.rows["news_articles"][0]["event_type"] == "earnings"
 
 
+def test_news_analysis_accepts_null_article_text():
+    analyzer = NewsAnalyzer(CollectionRepository(FakeSupabase()), NewsProvider(""))
+
+    analysis = analyzer.analyze({"title": "AAPL earnings beat estimates", "description": None})
+
+    assert analysis["sentiment"] == 1.0
+    assert analysis["event_type"] == "earnings"
+
+
 def test_market_failure_does_not_prevent_next_ticker():
     client = FakeSupabase()
     collector = MarketDataCollector(StaticMarket(market_history()), CollectionRepository(client), config())

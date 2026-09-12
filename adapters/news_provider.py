@@ -91,10 +91,7 @@ class NewsProvider:
             "plunge", "weak", "underperform", "sell", "crash"
         ]
         
-        text = (
-            article.get("title", "") + " " + 
-            article.get("description", "")
-        ).lower()
+        text = f"{article.get('title') or ''} {article.get('description') or ''}".lower()
         
         pos_count = sum(1 for kw in positive_keywords if kw in text)
         neg_count = sum(1 for kw in negative_keywords if kw in text)
